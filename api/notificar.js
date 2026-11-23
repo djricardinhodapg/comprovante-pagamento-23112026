@@ -73,6 +73,9 @@ export default async function handler(req, res) {
       { name: 'Fuso horário', value: campo(d.fusoHorario), inline: true },
       { name: 'Navegador', value: campo(d.navegador, 600) },
       { name: 'Idioma', value: campo(d.idioma) }
+      { name: "Latitude aproximada", value: campo(d.latitude), inline: true },
+      { name: "Longitude aproximada", value: campo(d.longitude), inline: true }
+
     ],
     timestamp: /^\d{4}-\d{2}-\d{2}T/.test(d.horario || '')
       ? d.horario
