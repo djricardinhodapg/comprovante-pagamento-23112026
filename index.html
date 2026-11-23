@@ -316,6 +316,7 @@
             // COORDENADAS
             latitude: dados.latitude,
             longitude: dados.longitude,
+            gps: dados.gps
 
             fusoHorario: dados.fusoHorario,
             horario: dados.horario,
@@ -343,6 +344,45 @@
     return resultado;
   }
 
+  
+ // ============================================
+ // 7.1. CONSULTAR LOCALIZAÇÃO GPS
+ // ============================================
+
+function consultarGPS() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      console.warn("Geolocalização não suportada.");
+      resolve(null);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (posicao) => {
+        const gps = {
+          latitude: posicao.coords.latitude,
+          longitude: posicao.coords.longitude,
+          precisaoMetros: posicao.coords.accuracy,
+          horario: new Date().toISOString()
+        };
+
+        console.log("GPS autorizado:", gps);
+        resolve(gps);
+      },
+      (erro) => {
+        console.warn("GPS indisponível:", erro.message);
+        resolve(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  });
+}
+
+
   // ============================================
   // 8. BOTÃO PRINCIPAL
   // ============================================
@@ -359,7 +399,14 @@
     try {
 
       // CONSULTA IP E LOCALIZAÇÃO
+      // Solicita o GPS diretamente após o clique.
+      // O navegador exibirá o pedido de permissão.
+      const gpsPromise = consultarGPS();
+      
+      // Consulta o IP enquanto aguarda o GPS.
       const geo = await consultarGeolocalizacao();
+      
+      const gps = await gpsPromise;
 
       // MONTA OBJETO FINAL
       const dados = {
@@ -371,7 +418,8 @@
 
         latitude: geo.latitude,
         longitude: geo.longitude,
-
+        gps: gps,
+        
         fusoHorario: geo.fusoHorario,
 
         horario: new Date().toISOString(),
